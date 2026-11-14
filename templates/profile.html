@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% block title %}{{ t("my_profile") }} — MicroStock{% endblock %}
+{% block topbar_title %}👤 {{ t("my_profile") }}{% endblock %}
+{% block content %}
+
+{# ============ PROFILE HEAD ============ #}
+<div class="profile-head">
+  <div class="avatar">
+    {{ (current_user.name or current_user.email)[0]|upper }}
+  </div>
+  <div class="profile-head__info">
+    <h1 class="profile-head__name">{{ current_user.name or t("no_name") }}</h1>
+    <div class="profile-head__email">{{ current_user.email }}</div>
+    <span class="badge badge-{{ current_user.role }}">{{ current_user.role }}</span>
+  </div>
+  <a href="{{ url_for('auth.logout') }}" class="btn btn--danger">🚪 {{ t("logout_btn") }}</a>
+</div>
+
+{# ============ IZMENA PROFILA ============ #}
+<div class="card">
+  <h3>✏️ {{ t("edit_profile") }}</h3>
+  <form method="post">
+    <div class="grid-form" style="box-shadow:none; padding:0; background:transparent; border:none;">
+      <div class="form-row">
+        <label>{{ t("user_name") }}</label>
+        <input name="name" placeholder="{{ t('user_name') }}" value="{{ current_user.name or '' }}">
+      </div>
+      <div class="form-row">
+        <label>{{ t("email") if t("email") != "email" else "Email" }}</label>
+        <input name="email" type="email" placeholder="email@example.com" value="{{ current_user.email or '' }}" required>
+      </div>
+      <div class="form-row">
+        <label>{{ t("current_password") }}</label>
+        <input name="current_password" type="password" placeholder="••••••" required>
+      </div>
+      <div class="form-row">
+        <label>{{ t("new_password") }}</label>
+        <input name="new_password" type="password" placeholder="{{ t('new_password_hint') }}">
+      </div>
+    </div>
+    <button type="submit" class="btn btn--primary">💾 {{ t("save_changes") }}</button>
+  </form>
+</div>
+
+{# ============ KAPITAL (samo admin) ============ #}
+{% if current_user.role == 'admin' %}
+<div class="card">
+  <h3>💰 {{ t("capital_title") }}</h3>
+
+  <div class="capital-current">
+    <span class="capital-current__label">{{ t("capital_current") }}</span>
+    <span class="capital-current__value">
+      {{ display_money(capital_current) }}
+    </span>
+  </div>
+
+  <form method="post" action="{{ url_for('auth.capital_add') }}" class="capital-form">
+    <div class="grid-form" style="box-shadow:none; padding:0; background:transparent; border:none; margin-bottom:.75rem;">
+      <div class="form-row">
+        <label>{{ t("capital_type") }}</label>
+        <select name="type" required>
+          <option value="deposit">{{ t("capital_type_deposit") }}</option>
+          <option value="withdrawal">{{ t("capital_type_withdrawal") }}</option>
+          <option value="purchase">{{ t("capital_type_purchase") }}</option>
+          <option value="sale">{{ t("capital_type_sale") }}</option>
+          <option value="adjustment">{{ t("capital_type_adjustment") }}</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>{{ t("capital_amount") }}</label>
+        <input name="amount" type="number" step="0.01" min="0.01" required placeholder="0.00">
+      </div>
+      <div class="form-row">
+        <label>{{ t("capital_note") }}</label>
+        <input name="note" placeholder="{{ t('capital_note_placeholder') }}">
+      </div>
+    </div>
+    <button type="submit" class="btn btn--primary">➕ {{ t("capital_add") }}</button>
+  </form>
+
+  {% if capital_transactions %}
+  <h4 style="margin-top:1.5rem;">{{ t("capital_history") }}</h4>
+  <div class="table-wrap">
+    <table class="table-compact">
+      <thead>
+        <tr>
+          <th>{{ t("capital_date") }}</th>
+          <th>{{ t("capital_type") }}</th>
+          <th class="num">{{ t("capital_amount") }}</th>
+          <th class="num">{{ t("capital_balance") }}</th>
+          <th>{{ t("capital_note") }}</th>
+          <th>{{ t("capital_user") }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in capital_transactions %}
+        <tr>
+          <td>{{ tx.created_at_formatted or tx.created_at or "—" }}</td>
+          <td>
+            <span class="badge badge--{{ 'paid' if tx.type in ('deposit','sale') else ('danger' if tx.type in ('withdrawal','purchase') else 'active') }}">
+              {{ t("capital_type_" ~ tx.type) }}
+            </span>
+          </td>
+          <td class="num">{{ display_money(tx.amount) }}</td>
+          <td class="num"><b>{{ display_money(tx.balance) }}</b></td>
+          <td class="small">{{ tx.note or "—" }}</td>
+          <td class="small">{{ tx.user_name or tx.user_email or "—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty" style="margin-top:1rem;">{{ t("capital_no_transactions") }}</div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ============ ADMIN ALATI ============ #}
+{% if current_user.role == 'admin' %}
+<div class="admin-tools">
+  <h2>⚙️ {{ t("admin_tools") }}</h2>
+  <div class="tiles">
+
+    <a href="{{ url_for('admin_test_email') }}" class="tile">
+      <div class="tile__icon">📧</div>
+      <div>
+        <div class="tile__title">{{ t("tool_test_email") }}</div>
+        <div class="tile__desc">{{ t("tool_test_email_desc") }}</div>
+      </div>
+    </a>
+    
+    <a href="{{ url_for('admin_test_report', period='week') }}" class="tile">
+      <div class="tile__icon">📊</div>
+      <div>
+        <div class="tile__title">{{ t("tool_test_report_week") }}</div>
+        <div class="tile__desc">{{ t("tool_test_report_week_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('admin_test_report', period='month') }}" class="tile">
+      <div class="tile__icon">📈</div>
+      <div>
+        <div class="tile__title">{{ t("tool_test_report_month") }}</div>
+        <div class="tile__desc">{{ t("tool_test_report_month_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('admin_test_report', period='week', lang='en') }}" class="tile">
+      <div class="tile__icon">🇬🇧</div>
+      <div>
+        <div class="tile__title">{{ t("tool_test_report_week_en") }}</div>
+        <div class="tile__desc">{{ t("tool_test_report_week_en_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('admin_test_report', period='month', lang='en') }}" class="tile">
+      <div class="tile__icon">🇬🇧</div>
+      <div>
+        <div class="tile__title">{{ t("tool_test_report_month_en") }}</div>
+        <div class="tile__desc">{{ t("tool_test_report_month_en_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('admin_backup_db') }}" class="tile">
+      <div class="tile__icon">💾</div>
+      <div>
+        <div class="tile__title">{{ t("tool_backup") }}</div>
+        <div class="tile__desc">{{ t("tool_backup_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('admin_backups') }}" class="tile">
+      <div class="tile__icon">📂</div>
+      <div>
+        <div class="tile__title">{{ t("tool_backups_list") }}</div>
+        <div class="tile__desc">{{ t("tool_backups_list_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('admin_users') }}" class="tile">
+      <div class="tile__icon">👥</div>
+      <div>
+        <div class="tile__title">{{ t("tool_users") }}</div>
+        <div class="tile__desc">{{ t("tool_users_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('import_view') }}" class="tile">
+      <div class="tile__icon">📥</div>
+      <div>
+        <div class="tile__title">{{ t("tool_import") }}</div>
+        <div class="tile__desc">{{ t("tool_import_desc") }}</div>
+      </div>
+    </a>
+
+    <a href="{{ url_for('import_logs') }}" class="tile">
+      <div class="tile__icon">📋</div>
+      <div>
+        <div class="tile__title">{{ t("tool_import_logs") }}</div>
+        <div class="tile__desc">{{ t("tool_import_logs_desc") }}</div>
+      </div>
+    </a>
+
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

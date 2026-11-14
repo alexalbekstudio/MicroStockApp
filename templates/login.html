@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="{{ current_lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ t("login") }} — MicroStock</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo-icon.png') }}">
+</head>
+<body class="login-body">
+  <div class="login-box">
+
+    {# ===== LOGO BLOK ===== #}
+    <div class="login-brand">
+      <img src="{{ url_for('static', filename='img/logo-icon.png') }}"
+           alt="ALEXANDAR" class="login-brand__icon">
+      <img src="{{ url_for('static', filename='img/logo-wordmark.png') }}"
+           alt="ALEXANDAR" class="login-brand__wordmark">
+    </div>
+
+    <div class="login-sep"></div>
+
+    {# ===== NAZIV APLIKACIJE ===== #}
+    <h1 class="login-title">📦 MicroStock</h1>
+
+    <div class="login-sep"></div>
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in msgs %}
+        <div class="flash-{{ cat }}">{{ m }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    {# ===== FORMA ===== #}
+    <form method="post" class="login-form">
+      <label class="login-label">{{ t("email") }}
+        <input name="email" type="email" required autofocus
+               placeholder="admin@microstock.local">
+      </label>
+      <label class="login-label">{{ t("password") }}
+        <input name="password" type="password" required
+               placeholder="••••••">
+      </label>
+      <button type="submit" class="login-submit">{{ t("login_button") }}</button>
+    </form>
+
+  <div style="text-align:center; margin-top:1rem">
+    <a href="{{ url_for('demo_login') }}"
+      style="display:block; width:100%; text-align:center; padding:.75rem;
+              border:1px dashed #6366f1; color:#6366f1; border-radius:8px;
+              text-decoration:none; font-weight:600; font-size:.95rem;
+              transition: background .15s">
+      🎯 Pogledaj demo (bez registracije)
+    </a>
+  </div>
+
+    <p class="login-hint" style="margin-top:.75rem; padding-top:.75rem">
+      <a href="{{ url_for('forgot_password') }}">{{ t("forgot_password_link") }}</a>
+    </p>
+
+    <p class="login-hint">
+      {{ t("login_first_time") }}<br>
+      Email: <code>admin@microstock.local</code><br>
+      {{ t("password") }}: <code>admin123</code>
+    </p>
+
+    <div class="login-sep"></div>
+
+    {# ===== PREKIDAČI JEZIKA I VALUTE ===== #}
+    <div class="login-switchers">
+      <select class="login-select"
+              onchange="location.href='/set-language/' + this.value">
+        {% for lang in available_languages %}
+          <option value="{{ lang.code }}"
+                  {% if lang.code == current_lang %}selected{% endif %}>
+            {{ lang.code | upper }}
+          </option>
+        {% endfor %}
+      </select>
+      <select class="login-select"
+              onchange="location.href='/set-currency/' + this.value">
+        {% for code, cfg in available_currencies.items() %}
+          <option value="{{ code }}"
+                  {% if code == current_currency %}selected{% endif %}>
+            {{ cfg.symbol }} {{ code }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <footer class="login-footer">
+    <a href="mailto:alexalbekstudio.design@gmail.com">
+      alexalbekstudio.design@gmail.com
+    </a>
+    <div>© 2026 ALEXANDAR Studio. {{ t("all_rights_reserved") }}</div>
+  </footer>
+</body>
+</html>
