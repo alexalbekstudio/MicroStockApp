@@ -81,3 +81,9 @@ build/
 node_modules/
 out/
 release/
+
+microstock_local.db*
+microstock_demo.db*
+dist/
+build/
+*.spec

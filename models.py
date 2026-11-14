@@ -152,14 +152,21 @@ def create_order_tx(conn, user_id, customer_name, channel_id, items, note="",
             (it["qty"], it["product_id"])
         )
 
-        # 2. Automatsko skidanje vezanih sirovina iz sastavnice (BOM)
+        # 2. Automatsko skidanje vezanih sirovina iz sastavnice (BOM) — kompatibilno sa PG i SQLite
         conn.execute("""
-            UPDATE products p
-            SET stock = p.stock - (r.qty_needed * %s)
-            FROM product_recipes r
-            WHERE r.parent_product_id = %s
-              AND p.id = r.material_product_id
-        """, (it["qty"], it["product_id"]))
+            UPDATE products
+            SET stock = stock - (
+                SELECT r.qty_needed * %s
+                FROM product_recipes r
+                WHERE r.parent_product_id = %s
+                  AND r.material_product_id = products.id
+            )
+            WHERE id IN (
+                SELECT material_product_id
+                FROM product_recipes
+                WHERE parent_product_id = %s
+            )
+        """, (it["qty"], it["product_id"], it["product_id"]))
 
     return order_id, False
 

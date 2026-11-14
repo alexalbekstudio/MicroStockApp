@@ -23,10 +23,11 @@ def init_db():
             name            TEXT,
             role            TEXT NOT NULL DEFAULT 'admin',
             active          INTEGER NOT NULL DEFAULT 1,
+            language        TEXT DEFAULT 'sr',
+            currency        TEXT DEFAULT 'RSD',
             capital         NUMERIC(12,2) NOT NULL DEFAULT 0,
-            preferred_lang  TEXT DEFAULT 'sr',
-            preferred_curr  TEXT DEFAULT 'RSD',
-            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login      TIMESTAMP
         )
         """,
         """
@@ -86,6 +87,9 @@ def _run_migrations(conn):
     Sve koristi IF NOT EXISTS — bezbedno za ponovno pokretanje.
     """
     migrations = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'sr'",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'RSD'",
         # 1) users.capital (kapital vlasnika)
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS capital NUMERIC(12,2) NOT NULL DEFAULT 0",
 
@@ -284,7 +288,10 @@ def _run_migrations(conn):
         # 20) Oznaka za repromaterijal / sirovinu i mernu jedinicu u tabeli products
         """
         ALTER TABLE products
-        ADD COLUMN IF NOT EXISTS is_material INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS is_material INTEGER NOT NULL DEFAULT 0
+        """,
+        """
+        ALTER TABLE products
         ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'kom'
         """,
 
