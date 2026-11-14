@@ -1,17 +1,46 @@
 {% extends "base.html" %}
-{% block title %}{{ t("invoice") }} #{{ order.id }} — MicroStock{% endblock %}
+{% set is_en = (current_lang == 'en') %}
+
+{% block title %}{{ t("invoice") }} #{{ order.id }} — {{ app_cfg.company_name if app_cfg else 'MicroStock' }}{% endblock %}
 {% block topbar_title %}🧾 {{ t("invoice") }} #{{ order.id }}{% endblock %}
 {% block content %}
-{# ============ LOGO HEADER ============ #}
-<div style="display:flex; align-items:center; gap:1rem; margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:2px solid #0f172a">
-  <img src="{{ url_for('static', filename='img/logo-wordmark.png') }}"
-       alt="ALEXANDAR" style="height:48px; width:auto">
-  <div>
-    <div style="font-weight:800; font-size:1.15rem">MicroStock</div>
-    <div class="muted small">{{ t("app_name") }} · {{ t("invoice") }}</div>
+
+<style>
+  @media print {
+    .no-print, footer, .topbar, .sidebar { display: none !important; }
+    .main, .content { padding: 0 !important; margin: 0 !important; }
+  }
+</style>
+
+{# ============ ZAGLAVLJE FIRME KUPCA (Sa opcionim logom) ============ #}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; margin-bottom:1.5rem; padding-bottom:1rem; border-bottom:2px solid #0f172a; flex-wrap:wrap;">
+  <div style="display:flex; align-items:center; gap:1rem;">
+    {% if has_custom_logo %}
+      <img src="{{ url_for('static', filename='img/company-logo.png') }}"
+           alt="Logo" style="max-height:54px; width:auto; max-width:180px; object-fit:contain;">
+    {% endif %}
+    <div>
+      <div style="font-weight:800; font-size:1.35rem; color:#0f172a;">
+        {{ app_cfg.company_name if (app_cfg and app_cfg.company_name) else 'Moja Firma' }}
+      </div>
+      <div class="muted small" style="line-height:1.4;">
+        {% if app_cfg and app_cfg.company_address %}{{ app_cfg.company_address }}<br>{% endif %}
+        {% if app_cfg and app_cfg.company_pib %}PIB: {{ app_cfg.company_pib }}{% endif %}
+        {% if app_cfg and app_cfg.company_mb %} · MB: {{ app_cfg.company_mb }}{% endif %}
+        {% if app_cfg and app_cfg.company_bank_acc %}<br>{{ 'Bank Account' if is_en else 'Tekući račun' }}: <b>{{ app_cfg.company_bank_acc }}</b>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:right;">
+    <div style="font-weight:800; font-size:1.25rem;">🧾 {{ t("invoice") }} #{{ "%05d"|format(order.id) }}</div>
+    <div class="muted small">
+      {{ t("date") }}: <b>{{ (order.created_at|string)[:16] }}</b>
+    </div>
   </div>
 </div>
-<div class="page-header">
+
+<div class="page-header no-print">
   <h1>🧾 {{ t("invoice") }} #{{ order.id }}</h1>
   <div class="page-header__actions">
     <button onclick="window.print()" class="btn btn--secondary">🖨️ {{ t("print") }}</button>
@@ -24,24 +53,31 @@
   <div class="split" style="margin-bottom:1rem">
     <div>
       <div class="muted small">{{ t("col_customer") }}</div>
-      <div style="font-weight:700">{{ order.customer_name }}</div>
+      <div style="font-weight:700; font-size:1.05rem;">{{ order.customer_name }}</div>
     </div>
     <div>
       <div class="muted small">{{ t("col_channel") }}</div>
       <div style="font-weight:700">{{ order.channel }} ({{ order.fee_percent }}%)</div>
     </div>
   </div>
+  {% if order.note %}
   <div>
-    <div class="muted small">{{ t("date") }}</div>
-    <div style="font-weight:700">{{ order.created_at }}</div>
+    <div class="muted small">{{ 'Note' if is_en else 'Napomena' }}</div>
+    <div>{{ order.note }}</div>
   </div>
+  {% endif %}
 </div>
 
 <h2>{{ t("order_items") }}</h2>
 <div class="table-wrap">
   <table>
     <thead>
-      <tr><th>{{ t("col_product") }}</th><th class="num">{{ t("col_qty") }}</th><th class="num">{{ t("col_price") }}</th><th class="num">{{ t("col_total") }}</th></tr>
+      <tr>
+        <th>{{ t("col_product") }}</th>
+        <th class="num">{{ t("col_qty") }}</th>
+        <th class="num">{{ t("col_price") }}</th>
+        <th class="num">{{ t("col_total") }}</th>
+      </tr>
     </thead>
     <tbody>
       {% for i in items %}

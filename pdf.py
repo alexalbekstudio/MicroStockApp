@@ -1,23 +1,27 @@
 # pdf.py
 """
-Generator PDF faktura koristeći fpdf2 sa Unicode fontom (DejaVuSans).
-Podržava naša slova: č, ć, š, ž, đ.
+Generator PDF faktura i nalepnica koristeći fpdf2 sa Unicode fontom (DejaVuSans).
+- Bez hardkodovanog ALEXANDAR logotipa (koristi logo kupca ako je otpremljen, ili samo naziv firme).
+- Ispravljen RGB format QR koda (sprečava kose crte / distorziju u PDF-u).
+- Popravljen položaj linije zaglavlja.
 """
 
 import io
+import re
 import qrcode
 from pathlib import Path
 from datetime import datetime
 from fpdf import FPDF
 
+from database import get_app_settings
 
 # --- Putanje do fontova ---
 FONT_DIR = Path(__file__).parent / "fonts"
 FONT_REGULAR = FONT_DIR / "DejaVuSans.ttf"
 FONT_BOLD = FONT_DIR / "DejaVuSans-Bold.ttf"
 
-# --- Logo ---
-LOGO_PATH = Path(__file__).parent / "static" / "img" / "logo-wordmark.png"
+# --- Opcioni logo kupca (uploadovan kroz Settings) ---
+CUSTOM_LOGO_PATH = Path(__file__).parent / "static" / "img" / "company-logo.png"
 
 # --- Boje ---
 CRNA = (17, 17, 17)
@@ -27,42 +31,102 @@ ZELENA = (39, 174, 96)
 CRVENA = (217, 83, 79)
 
 
+def _format_nbs_account(acc_raw: str) -> str:
+    """Formatira srpski tekući račun u 18 cifara za NBS IPS QR standard."""
+    digits = re.sub(r"\D", "", acc_raw or "")
+    if "-" in (acc_raw or ""):
+        parts = [re.sub(r"\D", "", p) for p in acc_raw.split("-")]
+        if len(parts) == 3 and len(parts[0]) == 3 and len(parts[2]) == 2:
+            return parts[0] + parts[1].zfill(13) + parts[2]
+    if len(digits) == 18:
+        return digits
+    return ""
+
+
+def _make_qr_png_buffer(data_str: str, box_size: int = 4, border: int = 1) -> io.BytesIO:
+    """
+    Generiše čist RGB PNG bafer QR koda.
+    .convert('RGB') sprečava fpdf2 bug sa kosim/izlomljenim linijama kod 1-bitnih slika.
+    """
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size,
+        border=border,
+    )
+    qr.add_data(data_str)
+    qr.make(fit=True)
+    img_qr = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    buf = io.BytesIO()
+    img_qr.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
 class InvoicePDF(FPDF):
-    """Podklasa FPDF za fakturu."""
+    """Podklasa FPDF za fakturu sa podacima i opcionim logom firme kupca."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cfg = get_app_settings()
 
     def header(self):
-        # Logo levo (ako postoji)
-        if LOGO_PATH.exists():
+        has_custom_logo = CUSTOM_LOGO_PATH.exists()
+        text_x = 10
+
+        if has_custom_logo:
             try:
-                self.image(str(LOGO_PATH), x=10, y=8, w=40)
+                self.image(str(CUSTOM_LOGO_PATH), x=10, y=9, w=34)
+                text_x = 48
             except Exception:
-                pass
-        # Naziv aplikacije
-        self.set_xy(55, 10)
-        self.set_font("DejaVu", "B", 16)
+                text_x = 10
+
+        company_name = (self.cfg.get("company_name") or "Moja Firma").strip()
+        address = (self.cfg.get("company_address") or "").strip()
+        pib = (self.cfg.get("company_pib") or "").strip()
+        mb = (self.cfg.get("company_mb") or "").strip()
+        bank_acc = (self.cfg.get("company_bank_acc") or "").strip()
+
+        self.set_xy(text_x, 9)
+        self.set_font("DejaVu", "B", 15)
         self.set_text_color(*CRNA)
-        self.cell(0, 8, "MicroStock", ln=True, align="L")
+        self.cell(95, 7, company_name[:40], ln=True, align="L")
 
-        self.set_x(55)
-        self.set_font("DejaVu", "", 9)
+        self.set_x(text_x)
+        self.set_font("DejaVu", "", 8.5)
         self.set_text_color(*SIVA)
-        self.cell(0, 5, "Tvoja online prodavnica", ln=True, align="L")
 
-        # Linija ispod headera
-        self.ln(4)
+        details = []
+        if address:
+            details.append(address)
+        if pib:
+            details.append(f"PIB: {pib}")
+        if mb:
+            details.append(f"MB: {mb}")
+        if details:
+            self.cell(95, 4.5, " · ".join(details)[:65], ln=True, align="L")
+
+        if bank_acc:
+            self.set_x(text_x)
+            self.cell(95, 4.5, f"Tekući račun: {bank_acc}", ln=True, align="L")
+
+        # Linija je spuštena na y=34 da nikada ne pređe preko desnog bloka (Datum/Kanal/Status/Valuta)
         self.set_draw_color(*CRNA)
-        self.set_line_width(0.8)
-        y = self.get_y()
-        self.line(10, y, 200, y)
-        self.ln(6)
+        self.set_line_width(0.6)
+        line_y = max(self.get_y() + 3, 34)
+        self.line(10, line_y, 200, line_y)
+        self.set_y(line_y + 6)
 
     def footer(self):
+        company_name = (self.cfg.get("company_name") or "MicroStock").strip()
         self.set_y(-20)
         self.set_font("DejaVu", "I", 8)
         self.set_text_color(*SIVA)
-        self.cell(0, 5,
-                  f"MicroStock · generisano {datetime.now().strftime('%d.%m.%Y %H:%M')} · Hvala na poverenju!",
-                  align="C")
+        self.cell(
+            0, 5,
+            f"{company_name} · generisano {datetime.now().strftime('%d.%m.%Y %H:%M')} · Hvala na poverenju!",
+            align="C"
+        )
 
 
 def generate_invoice_pdf(order, items, subtotal, fee, total,
@@ -79,14 +143,14 @@ def generate_invoice_pdf(order, items, subtotal, fee, total,
     pdf.add_page()
 
     # ===== Zaglavlje desno =====
-    pdf.set_xy(110, 12)
-    pdf.set_font("DejaVu", "B", 16)
+    pdf.set_xy(110, 9)
+    pdf.set_font("DejaVu", "B", 14)
     pdf.set_text_color(*CRNA)
-    pdf.cell(90, 8, f"RAČUN #{order['id']:05d}", align="R", ln=True)
+    pdf.cell(90, 6.5, f"RAČUN #{order['id']:05d}", align="R", ln=True)
     pdf.set_x(110)
-    pdf.set_font("DejaVu", "", 10)
+    pdf.set_font("DejaVu", "", 8.5)
     pdf.set_text_color(*SIVA)
-    # Konvertuj created_at u string (radi i za datetime i za string)
+
     created = order.get("created_at")
     if hasattr(created, "strftime"):
         created_str = created.strftime("%d.%m.%Y")
@@ -95,16 +159,16 @@ def generate_invoice_pdf(order, items, subtotal, fee, total,
     else:
         created_str = "—"
 
-    pdf.cell(90, 5, f"Datum: {created_str}", align="R", ln=True)
+    pdf.cell(90, 4.2, f"Datum: {created_str}", align="R", ln=True)
     pdf.set_x(110)
-    pdf.cell(90, 5, f"Kanal: {order['channel']}", align="R", ln=True)
+    pdf.cell(90, 4.2, f"Kanal: {order['channel']}", align="R", ln=True)
     pdf.set_x(110)
-    pdf.cell(90, 5, f"Status: {order['status']}", align="R", ln=True)
+    pdf.cell(90, 4.2, f"Status: {order['status']}", align="R", ln=True)
     pdf.set_x(110)
-    pdf.cell(90, 5, f"Valuta: {currency}", align="R", ln=True)
+    pdf.cell(90, 4.2, f"Valuta: {currency}", align="R", ln=True)
     pdf.set_text_color(0, 0, 0)
 
-    pdf.set_y(45)
+    pdf.set_y(40)
 
     # ===== Info box =====
     pdf.set_fill_color(*SVETLO_SIVA)
@@ -116,7 +180,7 @@ def generate_invoice_pdf(order, items, subtotal, fee, total,
 
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("DejaVu", "B", 11)
-    pdf.cell(90, 7, "  " + order["customer_name"], ln=False)
+    pdf.cell(90, 7, "  " + str(order["customer_name"]), ln=False)
     pdf.set_font("DejaVu", "", 10)
     pdf.cell(10, 7, "", ln=False)
     pdf.cell(90, 7, f"  Broj: #{order['id']:05d}", ln=True)
@@ -129,9 +193,9 @@ def generate_invoice_pdf(order, items, subtotal, fee, total,
     pdf.cell(10, 6, "", ln=False)
     pdf.cell(90, 6, f"  Izvor: {order.get('source') or 'manual'}", ln=True)
 
-    pdf.cell(90, 6, "", ln=False)
-    pdf.cell(10, 6, "", ln=False)
     if order.get("external_id"):
+        pdf.cell(90, 6, "", ln=False)
+        pdf.cell(10, 6, "", ln=False)
         pdf.cell(90, 6, f"  Ref: {order['external_id']}", ln=True)
 
     pdf.ln(6)
@@ -168,6 +232,7 @@ def generate_invoice_pdf(order, items, subtotal, fee, total,
     pdf.ln(4)
 
     # ===== Suma =====
+    y_totals_start = pdf.get_y()
     pdf.set_x(120)
     pdf.set_font("DejaVu", "", 10)
     pdf.set_text_color(*SIVA)
@@ -195,15 +260,41 @@ def generate_invoice_pdf(order, items, subtotal, fee, total,
     pdf.cell(45, 8, "UKUPNO:", align="R")
     pdf.cell(35, 8, f"{float(total):.2f} {currency_symbol}", align="R", ln=True)
 
+    # ===== NBS IPS QR KOD =====
+    nbs_acc = _format_nbs_account(pdf.cfg.get("company_bank_acc", ""))
+    if nbs_acc and currency == "RSD" and float(total) > 0:
+        try:
+            company_clean = (pdf.cfg.get("company_name") or "Firma")[:35].replace("|", " ")
+            amount_str = f"RSD{float(total):.2f}".replace(".", ",")
+            ips_payload = (
+                f"K:PR|V:01|C:1|R:{nbs_acc}|N:{company_clean}"
+                f"|I:{amount_str}|SF:289|S:Racun br {order['id']:05d}"
+            )
+            qr_buf = _make_qr_png_buffer(ips_payload, box_size=3, border=1)
+
+            pdf.image(qr_buf, x=12, y=y_totals_start, w=28, h=28)
+            pdf.set_xy(42, y_totals_start + 8)
+            pdf.set_font("DejaVu", "B", 8)
+            pdf.set_text_color(*CRNA)
+            pdf.cell(60, 4, "NBS IPS QR Plaćanje", ln=True)
+            pdf.set_x(42)
+            pdf.set_font("DejaVu", "", 7)
+            pdf.set_text_color(*SIVA)
+            pdf.cell(60, 4, "Skenirajte aplikacijom vaše banke", ln=True)
+        except Exception:
+            pass
+
     pdf.ln(10)
     pdf.set_x(120)
     pdf.set_text_color(*ZELENA)
     pdf.set_draw_color(*ZELENA)
     pdf.set_line_width(0.5)
     pdf.set_font("DejaVu", "B", 10)
-    pdf.cell(40, 10, "PLAĆENO", border=1, align="C", ln=True)
+    status_label = "PLAĆENO" if str(order.get("status", "")).lower() in ("paid", "completed", "shipped", "done", "plaćeno") else str(order.get("status", "U OBRADI")).upper()
+    pdf.cell(40, 10, status_label, border=1, align="C", ln=True)
 
     return bytes(pdf.output())
+
 
 # ============================================================
 # ANALYTICS PDF
@@ -223,29 +314,22 @@ def generate_analytics_pdf(kpi, channels, products, loss, customers,
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # Naslov + period
-    pdf.set_xy(10, 12)
-    pdf.set_font("DejaVu", "B", 18)
+    pdf.set_xy(10, 38)
+    pdf.set_font("DejaVu", "B", 16)
     pdf.set_text_color(*CRNA)
-    pdf.cell(0, 10, title, ln=True, align="L")
+    pdf.cell(0, 8, title, ln=True, align="L")
 
     pdf.set_x(10)
     pdf.set_font("DejaVu", "", 9)
     pdf.set_text_color(*SIVA)
     period_label = f"Period: {days} dana" if days else "Period: sve vreme"
-    pdf.cell(0, 5, period_label, ln=True, align="L")
-
-    pdf.set_x(10)
-    pdf.cell(0, 5, f"Generisano: {_dt.now().strftime('%d.%m.%Y %H:%M')}", ln=True, align="L")
-
+    pdf.cell(0, 5, f"{period_label} · Generisano: {_dt.now().strftime('%d.%m.%Y %H:%M')}", ln=True, align="L")
     pdf.ln(4)
 
-    # === KPI ===
     pdf.set_font("DejaVu", "B", 12)
     pdf.set_text_color(*CRNA)
     pdf.cell(0, 8, "KPI", ln=True)
 
-    pdf.set_font("DejaVu", "", 10)
     kpi_rows = [
         ("Prihod:",       f"{float(kpi.get('revenue', 0)):.2f} {currency_symbol}"),
         ("Provizije:",    f"{float(kpi.get('fees', 0)):.2f} {currency_symbol}"),
@@ -261,7 +345,6 @@ def generate_analytics_pdf(kpi, channels, products, loss, customers,
         pdf.set_font("DejaVu", "B", 10)
         pdf.cell(0, 6, value, ln=True)
 
-    # === Kanali ===
     if channels:
         pdf.add_page()
         pdf.set_font("DejaVu", "B", 12)
@@ -269,7 +352,6 @@ def generate_analytics_pdf(kpi, channels, products, loss, customers,
         pdf.cell(0, 8, "Prodaja po kanalima", ln=True)
         pdf.ln(2)
 
-        # Header tabele
         pdf.set_fill_color(*CRNA)
         pdf.set_text_color(255, 255, 255)
         pdf.set_font("DejaVu", "B", 8)
@@ -291,7 +373,6 @@ def generate_analytics_pdf(kpi, channels, products, loss, customers,
             pdf.cell(15, 6, str(c.get("orders", 0)), align="C")
             pdf.ln()
 
-    # === Top proizvodi ===
     if products:
         pdf.add_page()
         pdf.set_font("DejaVu", "B", 12)
@@ -315,7 +396,6 @@ def generate_analytics_pdf(kpi, channels, products, loss, customers,
             pdf.cell(30, 6, f"{float(p.get('profit', 0)):.2f}", align="R")
             pdf.ln()
 
-    # === Top kupci ===
     if customers:
         pdf.add_page()
         pdf.set_font("DejaVu", "B", 12)
@@ -339,6 +419,7 @@ def generate_analytics_pdf(kpi, channels, products, loss, customers,
 
     return bytes(pdf.output())
 
+
 # ============================================================
 # PROJECT PDF
 # ============================================================
@@ -355,11 +436,10 @@ def generate_project_pdf(project, time_entries, expenses,
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
 
-    # Naslov
-    pdf.set_xy(10, 12)
-    pdf.set_font("DejaVu", "B", 18)
+    pdf.set_xy(10, 38)
+    pdf.set_font("DejaVu", "B", 16)
     pdf.set_text_color(*CRNA)
-    pdf.cell(0, 10, f"Projekat: {project.get('name', '')}", ln=True, align="L")
+    pdf.cell(0, 8, f"Projekat: {project.get('name', '')}", ln=True, align="L")
 
     pdf.set_x(10)
     pdf.set_font("DejaVu", "", 9)
@@ -372,12 +452,10 @@ def generate_project_pdf(project, time_entries, expenses,
 
     pdf.ln(4)
 
-    # KPI
     pdf.set_font("DejaVu", "B", 12)
     pdf.set_text_color(*CRNA)
     pdf.cell(0, 8, "KPI", ln=True)
 
-    pdf.set_font("DejaVu", "", 10)
     kpi_rows = [
         ("Ugovorena vrednost:",  f"{float(project.get('contract_value', 0)):.2f} {currency_symbol}"),
         ("Ukupan trošak:",       f"{float(project.get('total_cost', 0)):.2f} {currency_symbol}"),
@@ -391,7 +469,6 @@ def generate_project_pdf(project, time_entries, expenses,
         pdf.set_font("DejaVu", "B", 10)
         pdf.cell(0, 6, value, ln=True)
 
-    # Sati
     if time_entries:
         pdf.add_page()
         pdf.set_font("DejaVu", "B", 12)
@@ -415,7 +492,6 @@ def generate_project_pdf(project, time_entries, expenses,
             pdf.cell(80, 6, str(t.get("description", ""))[:50])
             pdf.ln()
 
-    # Troškovi
     if expenses:
         pdf.add_page()
         pdf.set_font("DejaVu", "B", 12)
@@ -441,16 +517,27 @@ def generate_project_pdf(project, time_entries, expenses,
 
     return bytes(pdf.output())
 
+
+# ============================================================
+# NALEPNICE SA QR KODOM (Ispravljen RGB QR + Unicode font)
+# ============================================================
+
 def generate_product_labels_pdf(product, count=24, currency="din"):
-    """
-    Kreira A4 tabak sa nalepnicama (3 kolone x 8 redova = 24 po stranici).
-    Svaka nalepnica sadrži: QR kod, SKU, skraćeni naziv i cenu.
-    """
+    """Kreira A4 tabak sa nalepnicama (3 kolone x 8 redova = 24 po stranici)."""
+    # Zaštita ako su zalihe 0 ili u minusu (npr. -3 kom)
+    try:
+        count = int(float(count))
+    except (ValueError, TypeError):
+        count = 24
+    if count <= 0:
+        count = 1
+
     pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.add_font("DejaVu", "", str(FONT_REGULAR))
+    pdf.add_font("DejaVu", "B", str(FONT_BOLD))
     pdf.set_auto_page_break(auto=False)
     pdf.add_page()
 
-    # Dimenzije mreže (A4 = 210 x 297 mm)
     cols = 3
     rows = 8
     label_w = 64
@@ -458,17 +545,10 @@ def generate_product_labels_pdf(product, count=24, currency="din"):
     margin_x = 9
     margin_y = 12
 
-    # Priprema QR koda u memoriji
-    qr = qrcode.QRCode(box_size=4, border=1)
-    qr.add_data(f"SKU:{product['sku']}")
-    qr.make(fit=True)
-    img_qr = qr.make_image(fill_color="black", back_color="white")
-    qr_buffer = io.BytesIO()
-    img_qr.save(qr_buffer, format="PNG")
-    qr_buffer.seek(0)
+    # RGB QR kod (kristalno oštar u fpdf2)
+    qr_buffer = _make_qr_png_buffer(str(product["sku"]), box_size=6, border=1)
 
     for i in range(count):
-        # Prelaz na novu stranicu ako se popuni 24 mesta
         index_on_page = i % (cols * rows)
         if i > 0 and index_on_page == 0:
             pdf.add_page()
@@ -479,36 +559,26 @@ def generate_product_labels_pdf(product, count=24, currency="din"):
         x = margin_x + col * label_w
         y = margin_y + row * label_h
 
-        # Okvir nalepnice (isprekidana ili tanka siva linija za sečenje)
-        pdf.set_draw_color(220, 220, 220)
+        pdf.set_draw_color(210, 210, 210)
         pdf.rect(x, y, label_w - 2, label_h - 2)
 
-        # Ubacivanje QR koda
         qr_buffer.seek(0)
-        pdf.image(qr_buffer, x=x + 1, y=y + 2, w=18, h=18)
+        pdf.image(qr_buffer, x=x + 2, y=y + 3, w=22, h=22)
 
-        # Tekstovi nalepnice
         pdf.set_text_color(20, 20, 20)
+        pdf.set_font("DejaVu", "B", 9)
+        pdf.set_xy(x + 26, y + 4)
+        pdf.cell(label_w - 29, 5, str(product["sku"])[:18], ln=0)
 
-        # SKU
-        pdf.set_font("Helvetica", "B", 9)
-        pdf.set_xy(x + 20, y + 3)
-        pdf.cell(label_w - 24, 5, str(product["sku"]), ln=0)
+        pdf.set_font("DejaVu", "", 8)
+        pdf.set_xy(x + 26, y + 10)
+        name_str = str(product.get("name") or "")
+        name_short = (name_str[:20] + "..") if len(name_str) > 22 else name_str
+        pdf.cell(label_w - 29, 5, name_short, ln=0)
 
-        # Naziv proizvoda (skraćen ako je dugačak)
-        pdf.set_font("Helvetica", "", 8)
-        pdf.set_xy(x + 20, y + 8)
-        name_short = (
-            product["name"][:22] + ".."
-            if len(product["name"]) > 24
-            else product["name"]
-        )
-        pdf.cell(label_w - 24, 5, name_short, ln=0)
-
-        # Cena
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.set_xy(x + 20, y + 14)
-        cena = f"{product['price']:,.0f} {currency}".replace(",", ".")
-        pdf.cell(label_w - 24, 6, cena, ln=0)
+        pdf.set_font("DejaVu", "B", 10)
+        pdf.set_xy(x + 26, y + 17)
+        cena = f"{float(product.get('price') or 0):,.0f} {currency}".replace(",", ".")
+        pdf.cell(label_w - 29, 6, cena, ln=0)
 
     return bytes(pdf.output())

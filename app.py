@@ -16,7 +16,8 @@ from flask import (Flask, render_template, request, redirect, url_for,
 from flask_login import login_required, current_user
 
 import analytics
-from database import init_db
+from database import init_db, get_app_settings, save_app_settings
+from limits import get_user_plan_context
 import models
 import pricing
 import projects as proj
@@ -41,6 +42,81 @@ init_mail(app)
 init_scheduler(app)
 
 # ==================== ADMIN TRACKING ====================
+
+@app.context_processor
+def inject_standalone_context():
+    from pathlib import Path
+    cfg = get_app_settings()
+    _, _, rules = get_user_plan_context()
+    has_logo = (Path(__file__).parent / "static" / "img" / "company-logo.png").exists()
+    return {
+        "app_cfg": cfg,
+        "plan_rules": rules,
+        "has_custom_logo": has_logo,
+    }
+
+@app.route("/settings", methods=["GET", "POST"])
+@login_required
+def system_settings():
+    from pathlib import Path
+    logo_path = Path(__file__).parent / "static" / "img" / "company-logo.png"
+
+    if request.method == "POST":
+        # Brisanje logotipa ako je kupac kliknuo "Ukloni logo"
+        if request.form.get("action") == "remove_logo":
+            if logo_path.exists():
+                logo_path.unlink()
+            flash(_msg("Logo firme je uklonjen.", "Company logo removed."), "ok")
+            return redirect(url_for("system_settings"))
+
+        # Upload novog logotipa ako je izabran fajl
+        logo_file = request.files.get("company_logo")
+        if logo_file and logo_file.filename:
+            try:
+                from PIL import Image
+                img = Image.open(logo_file.stream).convert("RGBA")
+                img.thumbnail((400, 140))
+                logo_path.parent.mkdir(parents=True, exist_ok=True)
+                img.save(str(logo_path), format="PNG")
+            except Exception as e:
+                flash(_msg(f"Greška pri čuvanju logotipa: {e}", f"Logo upload error: {e}"), "err")
+
+        form_data = {
+            "company_name": request.form.get("company_name", "Moja Firma").strip(),
+            "company_address": request.form.get("company_address", "").strip(),
+            "company_pib": request.form.get("company_pib", "").strip(),
+            "company_mb": request.form.get("company_mb", "").strip(),
+            "company_bank_acc": request.form.get("company_bank_acc", "").strip(),
+            "currency_base": request.form.get("currency_base", "RSD").strip(),
+            "smtp_server": request.form.get("smtp_server", "smtp.gmail.com").strip(),
+            "smtp_port": request.form.get("smtp_port", 587),
+            "smtp_use_tls": True,
+            "smtp_username": request.form.get("smtp_username", "").strip(),
+            "smtp_password": request.form.get("smtp_password", "").strip(),
+            "alert_email": request.form.get("alert_email", "").strip(),
+            "report_email": request.form.get("alert_email", "").strip(),
+            "pending_order_days": request.form.get("pending_order_days", 3),
+            "nbs_api_key": request.form.get("nbs_api_key", "").strip(),
+            "license_tier": request.form.get("license_tier", "ultimate").strip(),
+            "license_key": request.form.get("license_key", "").strip(),
+            "addon_analytics": 1 if request.form.get("addon_analytics") else 0,
+            "addon_suppliers": 1 if request.form.get("addon_suppliers") else 0,
+            "addon_projects": 1 if request.form.get("addon_projects") else 0,
+            "addon_recipes": 1 if request.form.get("addon_recipes") else 0,
+        }
+        save_app_settings(form_data)
+        if request.form.get("action") == "test_email":
+            from mailer import send_test_email
+            if send_test_email():
+                flash(_msg("Podešavanja sačuvana i test email uspešno poslat!", "Settings saved and test email sent!"), "ok")
+            else:
+                flash(_msg("Podešavanja sačuvana, ali test email nije prošao.", "Settings saved, but test email failed."), "err")
+        else:
+            flash(_msg("Podešavanja sistema su uspešno sačuvana.", "System settings saved successfully."), "ok")
+        return redirect(url_for("system_settings"))
+
+    cfg = get_app_settings()
+    return render_template("settings.html", cfg=cfg, has_custom_logo=logo_path.exists())
 
 @app.before_request
 def _track_user_activity():
@@ -354,9 +430,8 @@ import limits
 
 def feature_required(feature_key):
     """
-    Dekorater koji proverava da li korisnikov pretplatnički paket
-    podržava određenu funkcionalnost (npr. 'has_projects', 'has_suppliers', 'has_analytics').
-    Admini uvek imaju pun pristup.
+    Proverava da li aktivni paket (Core / Pro / Ultimate ili dokupljeni Add-on)
+    podržava traženi modul ('has_projects', 'has_suppliers', 'has_analytics', 'has_recipes').
     """
     def decorator(f):
         @wraps(f)
@@ -364,20 +439,14 @@ def feature_required(feature_key):
             if not current_user.is_authenticated:
                 return redirect(url_for("auth.login"))
 
-            # Admini imaju pristup bez ikakvih restrikcija
-            if current_user.role == "admin":
-                return f(*args, **kwargs)
-
-            # Provera paketa i statusa
             plan, is_active, rules = limits.get_user_plan_context(current_user.id)
 
-            if not is_active:
-                flash("Vaša pretplata je istekla. Obnovite paket za nastavak rada.", "err")
-                return redirect(url_for("billing_view"))
-
             if not rules.get(feature_key, False):
-                flash(f"Funkcija nije dostupna u paketu '{plan.upper()}'. Nadogradite paket na Pro.", "err")
-                return redirect(url_for("billing_view"))
+                flash(_msg(
+                    f"Ovaj modul nije uključen u vaš trenutni paket ({plan.upper()}). Možete ga aktivirati u Podešavanjima.",
+                    f"This module is not included in your current edition ({plan.upper()}). You can enable it in Settings."
+                ), "err")
+                return redirect(url_for("system_settings"))
 
             return f(*args, **kwargs)
         return decorated_function
@@ -918,164 +987,20 @@ def admin_dashboard():
 
 # ==================== KORISNIK: PREDPLATA / BILLING ====================
 
+# ==================== STANDALONE REDIRECT ZA STARE BILLING RUTE ====================
+
 @app.route("/billing")
 @login_required
-@role_required(*ALL_ROLES)
 def billing_view():
-    """Korisnički pregled pretplate sa podacima za produženje (Yettel IPS QR)."""
-    import subscriptions as subs
-    from datetime import date, timedelta
-    from db_adapter import connect
+    return redirect(url_for("system_settings"))
 
-    conn = connect()
-    try:
-        # Uzmi najsvežiju pretplatu korisnika
-        sub = conn.execute("""
-            SELECT * FROM subscriptions 
-            WHERE user_id = %s 
-            ORDER BY id DESC LIMIT 1
-        """, (current_user.id,)).fetchone()
-
-        # Ako korisnik nema nijedan unos, automatski mu dodeljujemo 14 dana Trial
-        if not sub:
-            today = date.today()
-            end_trial = today + timedelta(days=14)
-            sub_id = subs.add_subscription(
-                user_id=current_user.id,
-                plan_name="trial",
-                status="active",
-                start_date=today,
-                end_date=end_trial,
-                renewal_date=end_trial,
-                notes="Automatski 14-dnevni probni period"
-            )
-            sub = subs.get_subscription(sub_id)
-        else:
-            sub = dict(sub)
-    finally:
-        conn.close()
-
-    today = date.today()
-    end_date = sub.get("end_date")
-    
-    # Proračun preostalih dana
-    if end_date:
-        if isinstance(end_date, str):
-            from datetime import datetime as dt
-            end_date = dt.strptime(end_date, "%Y-%m-%d").date()
-        days_left = (end_date - today).days
-    else:
-        days_left = 0
-
-    is_active = (days_left >= 0) and (sub.get("status") == "active")
-
-    # Poziv na broj specifičan za ovog korisnika (npr. MS-0012)
-    user_ref = f"MS-{current_user.id:04d}"
-
-    return render_template(
-        "billing.html",
-        sub=sub,
-        is_active=is_active,
-        days_left=max(0, days_left),
-        user_ref=user_ref
-    )
-
-# ==================== ADMIN: PRETPLATE ====================
 
 @app.route("/admin/subscriptions")
-@login_required
-@role_required(*ADMIN_ONLY)
-def admin_subscriptions():
-    """Lista pretplata sa filterima."""
-    import subscriptions as subs
-
-    status = request.args.get("status", "").strip() or None
-    plan = request.args.get("plan", "").strip() or None
-    search = request.args.get("q", "").strip() or None
-
-    return render_template(
-        "admin_subscriptions.html",
-        subscriptions=subs.list_subscriptions(status, plan, search),
-        summary=subs.subscriptions_summary(),
-        plans=subs.PLANS,
-        f_status=status or "",
-        f_plan=plan or "",
-        f_search=search or "",
-    )
-
-
 @app.route("/admin/subscriptions/new", methods=["GET", "POST"])
-@login_required
-@role_required(*ADMIN_ONLY)
-def admin_subscription_new():
-    """Nova pretplata."""
-    import subscriptions as subs
-    from users import list_users
-
-    if request.method == "POST":
-        try:
-            sub_id = subs.add_subscription(
-                user_id=request.form.get("user_id", type=int),
-                plan_name=request.form.get("plan_name", "").strip(),
-                status=request.form.get("status", "active"),
-                start_date=request.form.get("start_date") or None,
-                end_date=request.form.get("end_date") or None,
-                renewal_date=request.form.get("renewal_date") or None,
-                is_self_hosted=request.form.get("is_self_hosted") == "on",
-                license_key=request.form.get("license_key", "").strip() or None,
-                sla_level=request.form.get("sla_level", "").strip() or None,
-                notes=request.form.get("notes", "").strip() or None,
-            )
-            flash("Pretplata dodata.", "success")
-            return redirect(url_for("admin_subscription_detail", sub_id=sub_id))
-        except Exception as e:
-            flash(f"Greška: {e}", "err")
-
-    return render_template(
-        "subscription_form.html",
-        sub=None,
-        users=list_users(),
-        plans=subs.PLANS,
-    )
-
-
 @app.route("/admin/subscriptions/<int:sub_id>", methods=["GET", "POST"])
 @login_required
-@role_required(*ADMIN_ONLY)
-def admin_subscription_detail(sub_id):
-    """Detalji + izmena pretplate."""
-    import subscriptions as subs
-    from users import list_users
-
-    sub = subs.get_subscription(sub_id)
-    if not sub:
-        abort(404)
-
-    if request.method == "POST":
-        try:
-            subs.update_subscription(
-                sub_id,
-                plan_name=request.form.get("plan_name", "").strip(),
-                status=request.form.get("status", "active"),
-                start_date=request.form.get("start_date") or None,
-                end_date=request.form.get("end_date") or None,
-                renewal_date=request.form.get("renewal_date") or None,
-                is_self_hosted=request.form.get("is_self_hosted") == "on",
-                license_key=request.form.get("license_key", "").strip() or None,
-                sla_level=request.form.get("sla_level", "").strip() or None,
-                notes=request.form.get("notes", "").strip() or None,
-            )
-            flash("Pretplata sačuvana.", "success")
-            return redirect(url_for("admin_subscription_detail", sub_id=sub_id))
-        except Exception as e:
-            flash(f"Greška: {e}", "err")
-
-    return render_template(
-        "subscription_form.html",
-        sub=sub,
-        users=list_users(),
-        plans=subs.PLANS,
-    )
+def admin_subscriptions(sub_id=None):
+    return redirect(url_for("system_settings"))
 
 
 @app.route("/admin/subscriptions/<int:sub_id>/cancel", methods=["POST"])
@@ -1296,7 +1221,7 @@ def product_qr_png(pid):
     import io as _io
 
     # URL do stranice proizvoda (javni)
-    base_url = os.getenv("PUBLIC_URL", "https://microstock.onrender.com")
+    base_url = os.getenv("PUBLIC_URL") or request.host_url.rstrip("/")
     product_url = f"{base_url}/products/{pid}/edit"
 
     qr = qrcode.QRCode(

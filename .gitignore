@@ -73,3 +73,11 @@ videos/
 audio/
 voices/
 glasovi/
+
+# Build i Desktop pakovanje (PyInstaller / Electron)
+dist/
+build/
+*.spec
+node_modules/
+out/
+release/

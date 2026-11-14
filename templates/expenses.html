@@ -1,29 +1,46 @@
 {% extends "base.html" %}
-{% block title %}Operativni troškovi — MicroStock{% endblock %}
-{% block topbar_title %}💸 Operativni troškovi{% endblock %}
+{% set is_en = (current_lang == 'en') %}
+
+{% set cat_labels_en = {
+  'Marketing': 'Marketing / Ads',
+  'Zakup': 'Rent / Space',
+  'Softver': 'Software & Subscriptions',
+  'Alati': 'Tools & Equipment',
+  'Režije': 'Utilities / Bills',
+  'Ostalo': 'Other'
+} %}
+
+{% block title %}{{ 'Operating Expenses — MicroStock' if is_en else 'Operativni troškovi — MicroStock' }}{% endblock %}
+{% block topbar_title %}💸 {{ 'Operating Expenses' if is_en else 'Operativni troškovi' }}{% endblock %}
 {% block content %}
 
 <div class="page-header">
-  <h1>Operativni i fiksni troškovi</h1>
+  <h1>{{ 'Operating & Fixed Expenses' if is_en else 'Operativni i fiksni troškovi' }}</h1>
   <div class="period-filter">
-    <a href="/expenses?days=30" class="btn btn--secondary {{ 'active' if days == 30 else '' }}">30 dana</a>
-    <a href="/expenses?days=90" class="btn btn--secondary {{ 'active' if days == 90 else '' }}">90 dana</a>
-    <a href="/expenses?days=365" class="btn btn--secondary {{ 'active' if days == 365 else '' }}">1 god</a>
+    <a href="/expenses?days=30" class="btn btn--secondary {{ 'active' if days == 30 else '' }}">
+      {{ '30 days' if is_en else '30 dana' }}
+    </a>
+    <a href="/expenses?days=90" class="btn btn--secondary {{ 'active' if days == 90 else '' }}">
+      {{ '90 days' if is_en else '90 dana' }}
+    </a>
+    <a href="/expenses?days=365" class="btn btn--secondary {{ 'active' if days == 365 else '' }}">
+      {{ '1 year' if is_en else '1 god' }}
+    </a>
   </div>
 </div>
 
 <!-- Kartice za brzi uvid u stvarno stanje -->
-<div class="grid-kpi" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
+<div class="grid-kpi" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
   <div class="card" style="margin: 0;">
-    <span class="muted small">Bruto profit od prodaje</span>
+    <span class="muted small">{{ 'Gross Profit from Sales' if is_en else 'Bruto profit od prodaje' }}</span>
     <h2 style="color: #3b82f6; margin-top: 6px;">{{ display_money(gross_profit) }}</h2>
   </div>
   <div class="card" style="margin: 0;">
-    <span class="muted small">Ukupni fiksni troškovi</span>
+    <span class="muted small">{{ 'Total Fixed Expenses' if is_en else 'Ukupni fiksni troškovi' }}</span>
     <h2 style="color: #ef4444; margin-top: 6px;">-{{ display_money(total_expenses) }}</h2>
   </div>
   <div class="card" style="margin: 0;">
-    <span class="muted small">Čista dobit celog biznisa</span>
+    <span class="muted small">{{ 'Net Business Profit' if is_en else 'Čista dobit celog biznisa' }}</span>
     <h2 style="color: {{ '#10b981' if net_profit >= 0 else '#ef4444' }}; margin-top: 6px;">
       {{ '+' if net_profit >= 0 else '' }}{{ display_money(net_profit) }}
     </h2>
@@ -33,34 +50,36 @@
 <!-- Forma za brzi unos novog troška -->
 {% if current_user.role in ('admin', 'manager') %}
 <div class="card" style="margin-bottom: 24px;">
-  <h3>Evidentiraj novi trošak</h3>
+  <h3>{{ 'Record New Expense' if is_en else 'Evidentiraj novi trošak' }}</h3>
   <form method="post" action="/expenses?days={{ days }}">
-    <div style="display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr auto; gap: 12px; align-items: end;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end;">
       <div>
-        <label>Naziv troška</label>
-        <input name="title" placeholder="npr. Instagram Ads, Zakup radionice" required>
+        <label>{{ 'Expense Title' if is_en else 'Naziv troška' }}</label>
+        <input name="title" placeholder="{{ 'e.g. Instagram Ads, Workshop Rent' if is_en else 'npr. Instagram Ads, Zakup radionice' }}" required>
       </div>
       <div>
-        <label>Kategorija</label>
+        <label>{{ 'Category' if is_en else 'Kategorija' }}</label>
         <select name="category">
-          <option value="Marketing">Marketing / Reklame</option>
-          <option value="Zakup">Zakup / Prostor</option>
-          <option value="Softver">Softver i pretplate</option>
-          <option value="Alati">Alati i oprema</option>
-          <option value="Režije">Struja / Režije</option>
-          <option value="Ostalo">Ostalo</option>
+          <option value="Marketing">{{ 'Marketing / Ads' if is_en else 'Marketing / Reklame' }}</option>
+          <option value="Zakup">{{ 'Rent / Space' if is_en else 'Zakup / Prostor' }}</option>
+          <option value="Softver">{{ 'Software & Subscriptions' if is_en else 'Softver i pretplate' }}</option>
+          <option value="Alati">{{ 'Tools & Equipment' if is_en else 'Alati i oprema' }}</option>
+          <option value="Režije">{{ 'Utilities / Bills' if is_en else 'Struja / Režije' }}</option>
+          <option value="Ostalo">{{ 'Other' if is_en else 'Ostalo' }}</option>
         </select>
       </div>
       <div>
-        <label>Iznos (RSD)</label>
+        <label>{{ 'Amount (RSD)' if is_en else 'Iznos (RSD)' }}</label>
         <input name="amount" type="number" step="0.01" min="1" placeholder="3000" required>
       </div>
       <div>
-        <label>Datum</label>
+        <label>{{ 'Date' if is_en else 'Datum' }}</label>
         <input name="expense_date" type="date">
       </div>
       <div>
-        <button type="submit" class="btn btn--primary" style="padding: 10px 18px;">➕ Dodaj</button>
+        <button type="submit" class="btn btn--primary" style="padding: 10px 18px; width: 100%;">
+          ➕ {{ 'Add' if is_en else 'Dodaj' }}
+        </button>
       </div>
     </div>
   </form>
@@ -69,16 +88,16 @@
 
 <!-- Tabela unetih troškova -->
 <div class="card">
-  <h3>Istorija operativnih troškova</h3>
+  <h3>{{ 'Operating Expenses History' if is_en else 'Istorija operativnih troškova' }}</h3>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
-          <th>Datum</th>
-          <th>Naziv troška</th>
-          <th>Kategorija</th>
-          <th class="num">Iznos</th>
-          <th class="num">Akcija</th>
+          <th>{{ 'Date' if is_en else 'Datum' }}</th>
+          <th>{{ 'Expense Title' if is_en else 'Naziv troška' }}</th>
+          <th>{{ 'Category' if is_en else 'Kategorija' }}</th>
+          <th class="num">{{ 'Amount' if is_en else 'Iznos' }}</th>
+          <th class="num">{{ 'Action' if is_en else 'Akcija' }}</th>
         </tr>
       </thead>
       <tbody>
@@ -86,19 +105,28 @@
         <tr>
           <td>{{ e.expense_date }}</td>
           <td><b>{{ e.title }}</b></td>
-          <td><span class="badge" style="background: #f1f5f9; padding: 3px 8px; border-radius: 4px;">{{ e.category }}</span></td>
+          <td>
+            <span class="badge" style="background: #f1f5f9; padding: 3px 8px; border-radius: 4px;">
+              {{ cat_labels_en.get(e.category, e.category) if is_en else e.category }}
+            </span>
+          </td>
           <td class="num" style="color: #ef4444; font-weight: bold;">-{{ display_money(e.amount) }}</td>
           <td class="num">
             {% if current_user.role in ('admin', 'manager') %}
-            <form method="post" action="/expenses/{{ e.id }}/delete" style="display: inline;" onsubmit="return confirm('Da li ste sigurni da želite da obrišete ovaj trošak?');">
-              <button type="submit" class="btn btn--secondary" style="padding: 3px 8px; font-size: 11px; color: #ef4444;">Obriši</button>
+            <form method="post" action="/expenses/{{ e.id }}/delete" style="display: inline;"
+                  onsubmit="return confirm('{{ 'Are you sure you want to delete this expense?' if is_en else 'Da li ste sigurni da želite da obrišete ovaj trošak?' }}');">
+              <button type="submit" class="btn btn--secondary" style="padding: 3px 8px; font-size: 11px; color: #ef4444;">
+                {{ 'Delete' if is_en else 'Obriši' }}
+              </button>
             </form>
             {% endif %}
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="5" class="muted" style="text-align: center; padding: 20px;">Nema evidentiranih troškova u izabranom periodu.</td>
+          <td colspan="5" class="muted" style="text-align: center; padding: 20px;">
+            {{ 'No recorded expenses in the selected period.' if is_en else 'Nema evidentiranih troškova u izabranom periodu.' }}
+          </span></td>
         </tr>
         {% endfor %}
       </tbody>

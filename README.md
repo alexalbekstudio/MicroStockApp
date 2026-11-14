@@ -1,123 +1,72 @@
-# 📦 MicroStock
+# 📦 MicroStockApp (Standalone & Self-Hosted Edition)
 
-**Lagani web alat za male online prodavce i male agencije.**
-
----
-
-## ✨ Šta MicroStock radi
-
-### 4 alata u jednom
-
-1. **📦 Zalihe i narudžbine** — proizvodi, narudžbine, kanali prodaje
-2. **📊 Analitika prodaje** — prihod, profit, marža, top proizvodi, gubitaši
-3. **📁 Praćenje projekata** — klijenti, sati, troškovi, budžet
-4. **🏢 Nabavka i dobavljači** — imenik, računi, upload, dugovanja
-
-### + Finansije, valute, jezici
-
-- **Kapital** — praćenje uplata/isplata
-- **Dug dobavljačima** — automatski iz računa
-- **Multi-currency** — RSD, EUR, USD (NBS kurs)
-- **SR/EN** — dvojezičnost
-- **PWA** — instalira se kao aplikacija
-- **QR skener** — brzo dodavanje proizvoda
-- **PDF fakture i izveštaji** — sa logom
+**Samostalni softver za vođenje zaliha, narudžbina, projekata i finansija — bez mesečne pretplate.**
+Instaliraj na svoj računar (Windows Desktop) ili sopstveni server (Docker / PostgreSQL / SQLite) uz potpunu kontrolu nad sopstvenim podacima.
 
 ---
 
-## 💰 Cene i paketi
+## ✨ Šta MicroStockApp radi (Modularna arhitektura)
 
-### 🎯 Starter — **5€/mesec**
-- 1 korisnik (admin)
-- Do **50 proizvoda**
-- Do **100 narudžbina mesečno**
-- Osnovna analitika
-- PDF fakture
-- Multi-currency
-- **Podrška:** email (48h odgovor)
-
-### 🚀 Pro — **10€/mesec** ⭐ preporučeno
-- Do **5 korisnika** (admin + manager + viewer)
-- **Neograničeno proizvoda**
-- **Neograničeno narudžbina**
-- Napredna analitika (top kupci, gubitaši)
-- Projekti i troškovi
-- Nabavka + dobavljači
-- Import iz CSV (svi kanali)
-- QR skener
-- PDF izveštaji
-- **Podrška:** email (24h odgovor)
-
-### 🏆 Business — **20€/mesec**
-- **Neograničeno korisnika**
-- **Sve iz Pro paketa**
-- **Prioritetna podrška** (12h odgovor)
-- **Prilagođeni izveštaji** (na zahtev)
-- **Backup na dnevnom nivou**
-- **Onboarding** (video poziv 1h)
-- **Prilagođavanja** (manje izmene po želji)
-
-### 💼 Enterprise — **kontakt**
-- Dedicated instanca
-- **Self-hosted** opcija (Docker)
-- Custom razvoj
-- SLA garancija
-- **Cena na upit**
+1. **📦 Zalihe i narudžbine (Core)** — proizvodi, sastavnice/recepture, narudžbine, PDF fakture sa logom i QR kodom.
+2. **📊 Analitika prodaje** — prihod, čist profit, marža po kanalu prodaje, top proizvodi i detekcija gubitaša.
+3. **🏢 Nabavka, dobavljači i kapital** — imenik dobavljača, ulazne fakture, praćenje dugovanja i tokova kapitala.
+4. **📁 Praćenje projekata (Agencijski modul)** — klijenti, utrošeni sati tima, troškovi po projektu i kontrola budžeta.
 
 ---
 
-## 🎁 Šta dobijaš sa svakim paketom
+## 💰 Cene i paketi (Jednokratna kupovina — Trajna licenca)
 
-- ✅ **Besplatan trial 14 dana** (bez kartice)
-- ✅ **Setup u 5 minuta** (nema instalacije)
-- ✅ **Backup tvojih podataka** (možeš da izvezeš u svakom trenutku)
-- ✅ **GDPR-friendly** (podaci u EU — Frankfurt)
-- ✅ **SSL enkripcija**
-- ✅ **Automatski update** (nema šta da radiš)
+Platiš jednom, koristiš zauvek na svom računaru ili serveru — bez skrivenih mesečnih troškova.
+
+### 🟢 1. Core (Osnovni model) — **49€ jednokratno**
+Idealan za male prodavce i zanatlije kojima treba red u magacinu i brzo fakturisanje.
+- **Zalihe i proizvodi** (neograničen broj artikala + alarmi za niske zalihe)
+- **Narudžbine i PDF fakture** sa vašim logom i podacima firme
+- **Osnovni pregled prodaje** i izvoz podataka (CSV)
+- **Multi-currency** (RSD, EUR, USD) i dvojezični interfejs (SR/EN)
+- **1 korisnik (Lokalna Desktop / SQLite instalacija)**
+
+### 🔵 2. Pro (+ Poslovni dodaci) — **99€ jednokratno** ⭐ Najčešći izbor
+Za firme koje žele potpunu kontrolu nad maržama, dobavljačima i više prodajnih kanala.
+- **Sve iz Core paketa**
+- **➕ Modul: Nabavka i dobavljači** (ulazni računi, kalkulacija nabavne cene, evidencija duga)
+- **➕ Modul: Napredna analitika i Kapital** (čist profit, gubitaši, grafikoni po kanalima, uplate/isplate)
+- **➕ Modul: Masovni CSV uvoz** (Etsy, Shopify, generički CSV) + **QR skener**
+- **➕ Sopstveni SMTP i NBS API** (slanje izveštaja i alarma direktno sa vašeg mejla)
+- **Do 5 korisnika** (Mrežni ili lokalni rad)
+
+### 🟣 3. Ultimate (Komplet funkcionalnost + Server/Kod) — **179€ jednokratno**
+Kompletno rešenje za timove, agencije i firme koje žele sve module i instalaciju na sopstvenom serveru.
+- **Sve iz Pro paketa (Svi moduli otključani)**
+- **➕ Modul: Praćenje projekata i radnih sati** (za agencije, radionice i uslužne delatnosti)
+- **➕ Neograničen broj korisnika i uloga** (Admin, Manager, Viewer)
+- **➕ Self-Hosted Server Setup** (Docker + PostgreSQL podrška za rad sa više lokacija + automatski dnevni backup)
+- **➕ Pristup izvornom kodu** za interne potrebe firme i prioritetna pomoć pri podešavanju
+
+*(Moguća je i pojedinačna kupovina dodataka uz Core paket: Modul Nabavka/Dobavljači **+30€**, Modul Projekti **+30€**, Modul Napredna Analitika & CSV **+25€**).*
 
 ---
 
-## ❌ Šta NIJE uključeno
+## 🛡️ Potpuna nezavisnost (Zero-Dependency)
 
-- ❌ **Nema WhatsApp/SMS integracije** (u planu)
-- ❌ **Nema Etsy API sync** (u planu)
-- ❌ **Nema OCR** za račune (u planu)
-- ❌ **Nema desktop verzije** (.exe — nije u planu)
-- ❌ **Nema mobilne app** u App Store/Play Store (PWA je dovoljna)
-
----
-
-## 🚀 Kako da počneš
-
-1. **Registruj se** na [microstock.onrender.com](https://microstock.onrender.com) (ili nas kontaktiraj)
-2. **Izaberi paket** (14 dana besplatno)
-3. **Dodaj proizvode** (ručno ili CSV import)
-4. **Kreiraj narudžbine**
-5. **Prati analitiku i finansije**
-
-**Uputstvo:** [📄 SR](docs/MicroStock-Uputstvo-SR.pdf) · [📄 EN](docs/MicroStock-User-Guide-EN.pdf)
+- ✅ **100% Vaši podaci** — baza se nalazi na vašem računaru ili vašem serveru.
+- ✅ **Ugrađen Setup Wizard (Settings)** — sami unosite podatke svoje firme, svoj Gmail App Password za notifikacije i NBS API ključ direktno iz interfejsa aplikacije.
+- ✅ **Automatska inicijalizacija baze** — aplikacija pri prvom pokretanju sama kreira sve tabele i strukturu.
+- ✅ **Offline & PWA podrška** — radi u lokalnoj mreži čak i kada nestane internet.
 
 ---
 
 ## 🛠️ Tehnologije
 
 - **Backend:** Python 3.12 + Flask 3
-- **Baza:** PostgreSQL
-- **Frontend:** HTML, CSS, JavaScript
-- **PDF:** FPDF2 + DejaVu
-- **Deployment:** Render.com (Frankfurt, EU)
-- **PWA:** Service Worker + Manifest
+- **Baza podataka:** Dual-mode podrška (SQLite za Desktop / PostgreSQL za Server)
+- **Frontend:** Čist HTML5, CSS3, JavaScript (PWA)
+- **Dokumenti:** FPDF2 (PDF fakture i izveštaji) + QRCode generator
 
 ---
 
-## 📞 Kontakt
+## 📞 Kontakt i naručivanje
 
 - **Email:** [alexalbekstudio.design@gmail.com](mailto:alexalbekstudio.design@gmail.com)
-- **Studio:** ALEXANDAR Studio
-- **Copyright:** © 2026 ALEXANDAR Studio
-
----
-
-## 📄 Licenca
-
-Komercijalna licenca. Kontaktiraj nas za detalje.
+- **Web:** [alexandar.studio](https://alexandar.studio)
+- **Studio:** ALEXANDAR Studio | © 2026 Sva prava zadržana.

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% set is_en = (current_lang == 'en') %}
+
+{% block title %}{{ 'System Settings & License — MicroStock' if is_en else 'Podešavanja sistema i Licenca — MicroStock' }}{% endblock %}
+{% block topbar_title %}⚙️ {{ 'System Settings & License' if is_en else 'Podešavanja sistema i Licenca' }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem;">
+
+  {% if not cfg.is_configured %}
+  <div style="background: linear-gradient(135deg, #1e293b, #0f172a); color: #f8fafc; padding: 1.25rem 1.5rem; border-radius: 10px; border-left: 4px solid #f59e0b;">
+    <h3 style="margin: 0 0 .35rem 0; color: #fbbf24;">
+      👋 {{ 'Welcome to MicroStock Standalone!' if is_en else 'Dobrodošli u MicroStock Standalone!' }}
+    </h3>
+    <p style="margin: 0; font-size: .92rem; color: #cbd5e1;">
+      {{ 'Enter your company details, bank account (for invoice QR codes), and your SMTP/NBS keys so the app runs completely independently.'
+         if is_en else
+         'Unesite podatke vaše firme, tekući račun (za QR kod na fakturama) i vaše email/NBS ključeve kako bi aplikacija radila potpuno samostalno.' }}
+    </p>
+  </div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('system_settings') }}" enctype="multipart/form-data" autocomplete="off" style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+    <!-- 1. PODACI O FIRMI -->
+    <div class="card" style="padding: 1.5rem; border-radius: 10px; background: var(--card-bg, #fff); border: 1px solid #e2e8f0;">
+      <h3 style="margin-top: 0; margin-bottom: 1rem;">
+        🏢 {{ '1. Company Details (for PDF Invoices & Payment QR)' if is_en else '1. Podaci o vašoj firmi (za PDF fakture i NBS IPS QR)' }}
+      </h3>
+      <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #e2e8f0; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            🖼️ {{ 'Company Logo (Optional — PNG/JPG for Invoices & Sidebar)' if is_en else 'Logo vaše firme (Opciono — PNG/JPG za fakture i meni)' }}
+          </label>
+          <input type="file" name="company_logo" accept="image/png,image/jpeg,image/webp" class="input">
+        </div>
+        {% if has_custom_logo %}
+        <div style="display:flex; align-items:center; gap:1rem;">
+          <img src="{{ url_for('static', filename='img/company-logo.png') }}" alt="Logo" style="max-height: 44px; border:1px solid #cbd5e1; padding:4px; border-radius:6px; background:#fff;">
+          <button type="submit" name="action" value="remove_logo" class="btn btn--secondary" style="color:#ef4444;">
+            🗑️ {{ 'Remove Logo' if is_en else 'Ukloni logo' }}
+          </button>
+        </div>
+        {% endif %}
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Company / Store Name *' if is_en else 'Naziv firme / radnje *' }}
+          </label>
+          <input type="text" name="company_name" value="{{ cfg.company_name }}" required class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Address & City' if is_en else 'Adresa i mesto' }}
+          </label>
+          <input type="text" name="company_address" value="{{ cfg.company_address }}"
+                 placeholder="{{ 'e.g. 12 Main St, City' if is_en else 'npr. Njegoševa 12, Pančevo' }}" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Tax ID (PIB / VAT)' if is_en else 'PIB' }}
+          </label>
+          <input type="text" name="company_pib" value="{{ cfg.company_pib }}" placeholder="100000000" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Registration No. (MB)' if is_en else 'Matični broj (MB)' }}
+          </label>
+          <input type="text" name="company_mb" value="{{ cfg.company_mb }}" placeholder="20000000" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Bank Account (for NBS IPS QR on Invoice)' if is_en else 'Tekući račun (za NBS IPS QR na fakturi)' }}
+          </label>
+          <input type="text" name="company_bank_acc" value="{{ cfg.company_bank_acc }}" placeholder="160-0000000123456-78" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'System Base Currency' if is_en else 'Osnovna valuta sistema' }}
+          </label>
+          <select name="currency_base" class="input" style="width:100%;">
+            <option value="RSD" {% if cfg.currency_base == 'RSD' %}selected{% endif %}>RSD (Dinar)</option>
+            <option value="EUR" {% if cfg.currency_base == 'EUR' %}selected{% endif %}>EUR (Euro)</option>
+            <option value="USD" {% if cfg.currency_base == 'USD' %}selected{% endif %}>USD (Dollar)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. EMAIL NOTIFIKACIJE (SMTP) -->
+    <div class="card" style="padding: 1.5rem; border-radius: 10px; background: var(--card-bg, #fff); border: 1px solid #e2e8f0;">
+      <h3 style="margin-top: 0; margin-bottom: .35rem;">
+        📧 {{ '2. Email Notifications & Reports (SMTP)' if is_en else '2. Email notifikacije i izveštaji (SMTP)' }}
+      </h3>
+      <p style="font-size: .85rem; color: #64748b; margin-top: 0; margin-bottom: 1rem;">
+        {{ 'For Gmail: enable 2-Step Verification on your Google Account, generate a 16-character App Password, and paste it below.'
+           if is_en else
+           'Za Gmail: uključite 2-Step Verification na Google nalogu, kreirajte App Password (16 slova) i unesite ga ispod.' }}
+      </p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">SMTP Server</label>
+          <input type="text" name="smtp_server" value="{{ cfg.smtp_server }}" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">SMTP Port</label>
+          <input type="number" name="smtp_port" value="{{ cfg.smtp_port }}" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Your Email (SMTP Username)' if is_en else 'Vaš Email (SMTP Username)' }}
+          </label>
+          <input type="email" name="smtp_username" value="{{ cfg.smtp_username }}"
+                 autocomplete="off" placeholder="your.company@gmail.com" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Google App Password / SMTP Password' if is_en else 'Google App Password / SMTP Šifra' }}
+          </label>
+          <input type="password" name="smtp_password" value="{{ cfg.smtp_password }}"
+                 autocomplete="new-password" placeholder="xxxx xxxx xxxx xxxx" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Recipient Email for Alerts & Reports' if is_en else 'Email za prijem alarma i izveštaja' }}
+          </label>
+          <input type="email" name="alert_email" value="{{ cfg.alert_email }}"
+                 autocomplete="off" placeholder="office@company.com" class="input" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Pending Order Alert Threshold (days)' if is_en else 'Alarm za narudžbine koje čekaju (dana)' }}
+          </label>
+          <input type="number" name="pending_order_days" value="{{ cfg.pending_order_days }}" min="1" max="30" class="input" style="width:100%;">
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. KURSNA LISTA (NBS API) -->
+    <div class="card" style="padding: 1.5rem; border-radius: 10px; background: var(--card-bg, #fff); border: 1px solid #e2e8f0;">
+      <h3 style="margin-top: 0; margin-bottom: .35rem;">
+        💱 {{ '3. Automatic Exchange Rates (Optional NBS API)' if is_en else '3. Automatski NBS kurs (Opciono)' }}
+      </h3>
+      <p style="font-size: .85rem; color: #64748b; margin-top: 0; margin-bottom: 1rem;">
+        {{ 'If left blank, the app uses local/manual exchange rates (configurable in Currency Rates). Enter an AllRatesToday API key for daily auto-sync.'
+           if is_en else
+           'Ako ostavite prazno, aplikacija koristi lokalni/ručno unet kurs (u sekciji Kursna lista). Ako imate AllRatesToday NBS API ključ, unesite ga za automatsko dnevno osvežavanje.' }}
+      </p>
+      <div>
+        <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+          {{ 'NBS API Key (AllRatesToday)' if is_en else 'NBS API Ključ (AllRatesToday)' }}
+        </label>
+        <input type="text" name="nbs_api_key" value="{{ cfg.nbs_api_key }}" autocomplete="off" placeholder="art_live_..." class="input" style="width:100%;">
+      </div>
+    </div>
+
+    <!-- 4. PAKET I AKTIVNI MODULI -->
+    <div class="card" style="padding: 1.5rem; border-radius: 10px; background: var(--card-bg, #fff); border: 1px solid #e2e8f0;">
+      <h3 style="margin-top: 0; margin-bottom: .35rem;">
+        🔑 {{ '4. Package Edition & Active Modules (One-Time License)' if is_en else '4. Konfiguracija paketa i modula (Jednokratna licenca)' }}
+      </h3>
+      <p style="font-size: .85rem; color: #64748b; margin-top: 0; margin-bottom: 1rem;">
+        {{ 'Select the active edition tier or enable individual add-on modules:'
+           if is_en else
+           'Izaberite aktivni nivo funkcionalnosti aplikacije ili pojedinačne dodatne module:' }}
+      </p>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'Base License Edition' if is_en else 'Osnovni paket licence' }}
+          </label>
+          <select name="license_tier" class="input" style="width:100%;">
+            <option value="core" {% if cfg.license_tier == 'core' %}selected{% endif %}>
+              🟢 {{ 'Core (49€ — Stock, Orders & PDF Invoices)' if is_en else 'Core (49€ — Osnovni: Zalihe i Fakture)' }}
+            </option>
+            <option value="pro" {% if cfg.license_tier == 'pro' %}selected{% endif %}>
+              🔵 {{ 'Pro (99€ — + Analytics, Suppliers & BOM Recipes)' if is_en else 'Pro (99€ — + Analitika, Nabavka, Sastavnice)' }}
+            </option>
+            <option value="ultimate" {% if cfg.license_tier == 'ultimate' %}selected{% endif %}>
+              🟣 {{ 'Ultimate (179€ — Complete Suite + Projects & Server)' if is_en else 'Ultimate (179€ — Komplet: Svi moduli + Projekti)' }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block; font-weight:600; margin-bottom:.3rem;">
+            {{ 'License Key (Optional)' if is_en else 'Licencni ključ (opciono)' }}
+          </label>
+          <input type="text" name="license_key" value="{{ cfg.license_key }}" placeholder="MS-STANDALONE-XXXX" class="input" style="width:100%;">
+        </div>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 1.25rem; padding-top: .5rem; border-top: 1px dashed #e2e8f0;">
+        <label style="display:flex; align-items:center; gap:.4rem; cursor:pointer;">
+          <input type="checkbox" name="addon_analytics" value="1" {% if cfg.addon_analytics %}checked{% endif %}>
+          <span>➕ {{ 'Add-on: Advanced Analytics (+25€)' if is_en else 'Dodatak: Napredna Analitika (+25€)' }}</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:.4rem; cursor:pointer;">
+          <input type="checkbox" name="addon_suppliers" value="1" {% if cfg.addon_suppliers %}checked{% endif %}>
+          <span>➕ {{ 'Add-on: Purchasing & Suppliers (+30€)' if is_en else 'Dodatak: Nabavka i Dobavljači (+30€)' }}</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:.4rem; cursor:pointer;">
+          <input type="checkbox" name="addon_projects" value="1" {% if cfg.addon_projects %}checked{% endif %}>
+          <span>➕ {{ 'Add-on: Projects & Time Tracking (+30€)' if is_en else 'Dodatak: Projekti i Sati (+30€)' }}</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:.4rem; cursor:pointer;">
+          <input type="checkbox" name="addon_recipes" value="1" {% if cfg.addon_recipes %}checked{% endif %}>
+          <span>➕ {{ 'Add-on: BOM Recipes / Materials (+25€)' if is_en else 'Dodatak: Sastavnice / Recepture (+25€)' }}</span>
+        </label>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 1rem; justify-content: flex-end; align-items: center;">
+      <button type="submit" name="action" value="test_email" class="btn" style="background:#475569; color:#fff; padding:.7rem 1.2rem; border-radius:8px; border:none; cursor:pointer;">
+        📨 {{ 'Save & Send Test Email' if is_en else 'Sačuvaj i pošalji Test Email' }}
+      </button>
+      <button type="submit" name="action" value="save" class="btn btn-primary" style="background:#4f46e5; color:#fff; padding:.7rem 1.6rem; border-radius:8px; border:none; font-weight:700; cursor:pointer;">
+        💾 {{ 'Save All Settings' if is_en else 'Sačuvaj sva podešavanja' }}
+      </button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}

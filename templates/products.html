@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% set is_en = (current_lang == 'en') %}
+
 {% block title %}{{ t("products") }} — MicroStock{% endblock %}
 {% block topbar_title %}📦 {{ t("products") }}{% endblock %}
 {% block content %}
@@ -10,27 +12,29 @@
   </div>
 </div>
 
-<!-- TABOVI ZA RAZDVAJANJE PROIZVODA I SIROVINA -->
-<div style="display: flex; gap: 8px; margin-bottom: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">
+<!-- TABOVI ZA RAZDVAJANJE PROIZVODA I SIROVINA (prikazuje se ako paket uključuje sastavnice/BOM) -->
+{% if not plan_rules or plan_rules.has_recipes %}
+<div style="display: flex; gap: 8px; margin-bottom: 18px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; flex-wrap: wrap;">
   <a href="/products?type=finished" 
      style="padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; 
             background: {{ '#3b82f6' if filter_type == 'finished' else '#f1f5f9' }}; 
             color: {{ '#ffffff' if filter_type == 'finished' else '#475569' }};">
-    📦 Gotovi proizvodi za prodaju
+    📦 {{ 'Finished Products for Sale' if is_en else 'Gotovi proizvodi za prodaju' }}
   </a>
   <a href="/products?type=materials" 
      style="padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; 
             background: {{ '#3b82f6' if filter_type == 'materials' else '#f1f5f9' }}; 
             color: {{ '#ffffff' if filter_type == 'materials' else '#475569' }};">
-    🧪 Sirovina i repromaterijal (BOM lager)
+    🧪 {{ 'Raw Materials & BOM Inventory' if is_en else 'Sirovina i repromaterijal (BOM lager)' }}
   </a>
   <a href="/products?type=all" 
      style="padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; 
             background: {{ '#3b82f6' if filter_type == 'all' else '#f1f5f9' }}; 
             color: {{ '#ffffff' if filter_type == 'all' else '#475569' }};">
-    🌐 Svi artikli
+    🌐 {{ 'All Items' if is_en else 'Svi artikli' }}
   </a>
 </div>
+{% endif %}
 
 {# ============ FILTER PRETRAGE ============ #}
 <form method="get" class="filter-form" style="margin-bottom: 18px;">
@@ -52,14 +56,22 @@
     <input name="name" placeholder="{{ t('placeholder_name') }}" required style="flex: 2; min-width: 150px;">
     
     <!-- Izbor tipa -->
+    {% if not plan_rules or plan_rules.has_recipes %}
     <select name="is_material" style="padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
-      <option value="0" {% if filter_type != 'materials' %}selected{% endif %}>📦 Gotov proizvod</option>
-      <option value="1" {% if filter_type == 'materials' %}selected{% endif %}>🧪 Sirovina / BOM</option>
+      <option value="0" {% if filter_type != 'materials' %}selected{% endif %}>
+        📦 {{ 'Finished Product' if is_en else 'Gotov proizvod' }}
+      </option>
+      <option value="1" {% if filter_type == 'materials' %}selected{% endif %}>
+        🧪 {{ 'Raw Material / BOM' if is_en else 'Sirovina / BOM' }}
+      </option>
     </select>
+    {% else %}
+    <input type="hidden" name="is_material" value="0">
+    {% endif %}
 
     <!-- Izbor jedinice mere -->
     <select name="unit" style="padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
-      <option value="kom">kom</option>
+      <option value="kom">{{ 'pcs' if is_en else 'kom' }}</option>
       <option value="kg">kg</option>
       <option value="g">g</option>
       <option value="l">l</option>
@@ -97,13 +109,15 @@
         <td>
           <b>{{ p.name }}</b>
           {% if p.is_material %}
-            <span style="font-size: 11px; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 600;">🧪 Sirovina</span>
+            <span style="font-size: 11px; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 600;">
+              🧪 {{ 'Material' if is_en else 'Sirovina' }}
+            </span>
           {% endif %}
         </td>
         <td class="num">{{ display_money(p.price) }}</td>
         <td class="num">
           <b>{{ (p.stock|float)|round(3) if (p.stock|float) % 1 != 0 else (p.stock|int) }}</b> 
-          <span class="muted small">{{ p.unit or 'kom' }}</span>
+          <span class="muted small">{{ ('pcs' if (p.unit or 'kom') == 'kom' and is_en else (p.unit or 'kom')) }}</span>
         </td>
         <td>
           {% if not p.active %}

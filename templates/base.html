@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="sr">
+<html lang="{{ current_lang|default('sr') }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,7 +14,6 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo-icon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo-icon.png') }}">
-<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo-icon.png') }}">
 <script>
   window.CURRENCY_RATES = {
     RSD: 1,
@@ -26,13 +25,15 @@
 </head>
 <body>
 
+{% set is_en = (current_lang == 'en') %}
+
 {% if session.get('demo_mode') %}
 <div style="background:#fbbf24;color:#0f172a;padding:.65rem 1rem;text-align:center;
             font-weight:700;font-size:.9rem;position:sticky;top:0;z-index:9999">
-  🎯 DEMO režim — svi podaci se resetuju svakih sat vremena ·
+  🎯 {{ 'DEMO mode — all data resets every hour' if is_en else 'DEMO režim — svi podaci se resetuju svakih sat vremena' }} ·
   <a href="{{ url_for('demo_exit') }}"
      style="color:#0f172a;text-decoration:underline;margin-left:.5rem">
-    Izađi iz demo
+    {{ 'Exit demo' if is_en else 'Izađi iz demo' }}
   </a>
 </div>
 {% endif %}
@@ -40,16 +41,20 @@
 <div class="layout">
 
   {# ============ SIDEBAR ============ #}
-    <aside class="sidebar" id="sidebar">
-    <div class="sidebar__brand">
-      <img src="{{ url_for('static', filename='img/logo-icon.png') }}"
-           alt="ALEXANDAR" class="sidebar__brand-icon">
-      <img src="{{ url_for('static', filename='img/logo-wordmark.png') }}"
-           alt="ALEXANDAR" class="sidebar__brand-wordmark">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar__brand" style="padding: 16px 20px;">
+      {% if has_custom_logo %}
+        <img src="{{ url_for('static', filename='img/company-logo.png') }}"
+             alt="Logo" style="max-height: 42px; width: auto; max-width: 180px; object-fit: contain;">
+      {% else %}
+        <div style="font-size: 18px; font-weight: 800; color: #f8fafc; letter-spacing: 0.5px;">
+          🏢 {{ app_cfg.company_name if (app_cfg and app_cfg.company_name) else 'Moja Firma' }}
+        </div>
+      {% endif %}
     </div>
 
     <div class="sidebar__logo">
-      <span>📦</span> MicroStock
+      <span>📦</span> {{ app_cfg.company_name if (app_cfg and app_cfg.company_name and app_cfg.company_name != 'Moja Firma') else 'MicroStock' }}
     </div>
 
     <nav class="sidebar__nav">
@@ -71,24 +76,29 @@
          class="sidebar__link {{ 'active' if nav.startswith('orders') or nav in ('new_order','order_detail','edit_order','delete_order','change_status') }}">
         <span class="sidebar__icon">🧾</span> {{ t("orders") }}
       </a>
+
+      {% if not plan_rules or plan_rules.has_analytics %}
       <a href="{{ url_for('analytics_view') }}"
          class="sidebar__link {{ 'active' if nav == 'analytics_view' }}">
         <span class="sidebar__icon">📊</span> {{ t("analytics") }}
       </a>
-      <!-- Pretplata / Paket -->
-      <a href="{{ url_for('billing_view') }}"
-         class="sidebar__link {{ 'active' if nav == 'billing_view' }}">
-        <span class="sidebar__icon">⭐</span> Pretplata
-      </a>
-      <!-- Usklađen link za Troškove -->
+      {% endif %}
+
       <a href="{{ url_for('expenses_view') }}"
          class="sidebar__link {{ 'active' if nav == 'expenses_view' or request.path.startswith('/expenses') }}">
-        <span class="sidebar__icon">💳</span> {{ t("expenses") if t("expenses") != "expenses" else "Troškovi" }}
+        <span class="sidebar__icon">💳</span> {{ 'Expenses' if is_en else 'Troškovi' }}
       </a>
 
+      {% if not plan_rules or plan_rules.has_projects %}
       <a href="{{ url_for('projects_view') }}"
          class="sidebar__link {{ 'active' if nav.startswith('project') or nav in ('time_add','time_delete','expense_add','expense_delete','team_add') }}">
         <span class="sidebar__icon">📁</span> {{ t("projects") }}
+      </a>
+      {% endif %}
+
+      <a href="{{ url_for('system_settings') }}"
+         class="sidebar__link {{ 'active' if nav == 'system_settings' }}">
+        <span class="sidebar__icon">⚙️</span> {{ 'Settings & License' if is_en else 'Podešavanja & Licenca' }}
       </a>
 
       {% if current_user.is_authenticated and current_user.role in ('admin', 'manager') %}
@@ -99,40 +109,36 @@
       </a>
       {% endif %}
       <a href="{{ url_for('pricing_view') }}"
-        class="sidebar__link {{ 'active' if nav in ('pricing_view','pricing_bulk') }}">
+         class="sidebar__link {{ 'active' if nav in ('pricing_view','pricing_bulk') }}">
         <span class="sidebar__icon">💱</span> {{ t("pricing") }}
       </a>
       <a href="{{ url_for('pricing_history') }}"
-        class="sidebar__link {{ 'active' if nav == 'pricing_history' }}">
+         class="sidebar__link {{ 'active' if nav == 'pricing_history' }}">
         <span class="sidebar__icon">📜</span> {{ t("price_history") }}
       </a>
       <a href="{{ url_for('scan_view') }}"
          class="sidebar__link {{ 'active' if nav == 'scan_view' }}">
         <span class="sidebar__icon">📷</span> {{ t("scan_title") }}
       </a>
+
+      {% if not plan_rules or plan_rules.has_suppliers %}
       <div class="sidebar__group">{{ t("group_purchases") }}</div>
       <a href="{{ url_for('suppliers_view') }}"
          class="sidebar__link {{ 'active' if nav.startswith('supplier') }}">
         <span class="sidebar__icon">🏢</span> {{ t("suppliers") }}
       </a>
       <a href="{{ url_for('purchases_view') }}"
-        class="sidebar__link {{ 'active' if nav in ('purchases_view', 'purchase_new', 'purchase_detail', 'purchase_item_add', 'purchase_item_delete', 'purchase_set_status') }}">
+         class="sidebar__link {{ 'active' if nav in ('purchases_view', 'purchase_new', 'purchase_detail', 'purchase_item_add', 'purchase_item_delete', 'purchase_set_status') }}">
         <span class="sidebar__icon">🧾</span> {{ t("purchase_invoices") }}
       </a>
       <a href="{{ url_for('purchases_reports') }}"
          class="sidebar__link {{ 'active' if nav == 'purchases_reports' }}">
         <span class="sidebar__icon">📊</span> {{ t("purchase_reports") }}
       </a>
+      {% endif %}
+
       {% if current_user.is_authenticated and current_user.role == 'admin' %}
       <div class="sidebar__group">{{ t("group_admin") }}</div>
-      <a href="{{ url_for('admin_dashboard') }}"
-         class="sidebar__link {{ 'active' if nav == 'admin_dashboard' }}">
-        <span class="sidebar__icon">📊</span> Admin Dashboard
-      </a>
-      <a href="{{ url_for('admin_subscriptions') }}"
-         class="sidebar__link {{ 'active' if nav.startswith('admin_subscription') }}">
-        <span class="sidebar__icon">💳</span> Pretplate
-      </a>
       <a href="{{ url_for('admin_users') }}"
          class="sidebar__link {{ 'active' if nav.startswith('admin_user') }}">
         <span class="sidebar__icon">👥</span> {{ t("users") }}
@@ -146,7 +152,7 @@
         <span class="sidebar__icon">💾</span> {{ t("backups") }}
       </a>
       <a href="{{ url_for('pricing_presets') }}"
-        class="sidebar__link {{ 'active' if nav == 'pricing_presets' }}">
+         class="sidebar__link {{ 'active' if nav == 'pricing_presets' }}">
         <span class="sidebar__icon">⚙️</span> {{ t("channel_presets") }}
       </a>
       <a href="{{ url_for('admin_currency_rates') }}"
@@ -158,9 +164,9 @@
 
     {% if current_user.is_authenticated %}
     <div class="sidebar__footer">
-      <a href="{{ url_for('billing_view') }}"
-         class="sidebar__link {{ 'active' if nav == 'billing_view' }}">
-        <span class="sidebar__icon">⭐</span> Pretplata
+      <a href="{{ url_for('system_settings') }}"
+         class="sidebar__link {{ 'active' if nav == 'system_settings' }}">
+        <span class="sidebar__icon">⚙️</span> {{ 'Settings & License' if is_en else 'Podešavanja & Licenca' }}
       </a>
       <a href="{{ url_for('help_view') }}"
          class="sidebar__link {{ 'active' if nav == 'help_view' }}">
@@ -184,11 +190,11 @@
 
     <header class="topbar">
       <div style="display:flex; align-items:center; gap:.5rem;">
-        <button class="burger" id="burger" aria-label="Meni">☰</button>
+        <button class="burger" id="burger" aria-label="Menu">☰</button>
         <div class="topbar__title">{% block topbar_title %}MicroStock{% endblock %}</div>
       </div>
 
-            <div class="topbar__right">
+      <div class="topbar__right">
 
         {# ===== Prekidač za jezik ===== #}
         <div class="topbar__switcher">
@@ -218,11 +224,11 @@
           </select>
         </div>
 
-        {# ===== Korisnik ===== #}
+        {# ===== Korisnik & Podešavanja ===== #}
         {% if current_user.is_authenticated %}
-          <a href="{{ url_for('billing_view') }}" class="topbar__user" style="text-decoration:none;" title="Moj paket">
-            <span>⭐</span>
-            <span>Pretplata</span>
+          <a href="{{ url_for('system_settings') }}" class="topbar__user" style="text-decoration:none;" title="{{ 'Settings & License' if is_en else 'Podešavanja i paket' }}">
+            <span>⚙️</span>
+            <span>{{ 'Settings' if is_en else 'Podešavanja' }}</span>
           </a>
           <a href="{{ url_for('auth.profile') }}" class="topbar__user">
             <span>👤</span>
@@ -246,7 +252,7 @@
 
       {% block content %}{% endblock %}
       
-      <!-- FOOTER: ALEXANDAR STUDIO -->
+      <!-- FOOTER: ALEXANDAR STUDIO (Dvojezični SR/EN) -->
       <footer style="margin-top: auto; padding: 24px 20px 20px; background: #0f172a; border-top: 1px solid rgba(217, 119, 6, 0.25); color: #94a3b8; font-size: 13px; text-align: center;">
         <div style="max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 8px;">
           
@@ -257,15 +263,15 @@
               ALEXANDAR Studio
             </span>
             <span style="color: #475569;">•</span>
-            <span style="color: #cbd5e1; font-weight: 500;">MicroStock v1.0</span>
+            <span style="color: #cbd5e1; font-weight: 500;">MicroStock Standalone v1.0</span>
           </div>
 
           <div style="color: #64748b; font-size: 12px;">
-            Pametno upravljanje zalihama, sastavnicama i narudžbinama za male proizvođače i zanatlije.
+            {{ 'Smart inventory, BOM recipes and order management for small businesses and makers.' if is_en else 'Pametno upravljanje zalihama, sastavnicama i narudžbinama za male proizvođače i zanatlije.' }}
           </div>
 
           <div style="font-size: 11px; color: #475569; margin-top: 4px;">
-            &copy; 2026 ALEXANDAR Studio. Sva prava zadržana.
+            &copy; 2026 ALEXANDAR Studio. {{ 'All rights reserved.' if is_en else 'Sva prava zadržana.' }}
           </div>
 
         </div>
@@ -273,6 +279,7 @@
     </main>
   </div>
 </div>
+
 {# ============ GLOBALNA PRETRAGA (Ctrl+K) ============ #}
 <div id="search-modal" class="search-modal" style="display:none">
   <div class="search-modal__backdrop" onclick="closeSearch()"></div>
@@ -284,7 +291,6 @@
   </div>
 </div>
 <script>
-  // Mobile sidebar toggle
   const burger  = document.getElementById('burger');
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebar-overlay');
@@ -296,7 +302,6 @@
   if (burger) burger.addEventListener('click', () => toggleSidebar(!sidebar.classList.contains('open')));
   if (overlay) overlay.addEventListener('click', () => toggleSidebar(false));
 
-  // ============ GLOBALNA PRETRAGA (Ctrl+K) ============
   const searchModal = document.getElementById('search-modal');
   const searchInput = document.getElementById('search-input');
   const searchResults = document.getElementById('search-results');
@@ -336,7 +341,7 @@
           const data = await r.json();
           renderSearchResults(data);
         } catch (err) {
-          searchResults.innerHTML = '<div class="search-empty">Greška.</div>';
+          searchResults.innerHTML = '<div class="search-empty">Error.</div>';
         }
       }, 200);
     });
@@ -345,7 +350,7 @@
   function renderSearchResults(data) {
     let html = '';
     if (data.products && data.products.length) {
-      html += '<div class="search-group">📦 Proizvodi</div>';
+      html += '<div class="search-group">📦 {{ "Products" if is_en else "Proizvodi" }}</div>';
       data.products.forEach(p => {
         html += `<a class="search-item" href="/products/${p.id}/edit">
           <span><b>${p.sku}</b> — ${p.name}</span>
@@ -353,7 +358,7 @@
       });
     }
     if (data.orders && data.orders.length) {
-      html += '<div class="search-group">🧾 Narudžbine</div>';
+      html += '<div class="search-group">🧾 {{ "Orders" if is_en else "Narudžbine" }}</div>';
       data.orders.forEach(o => {
         html += `<a class="search-item" href="/orders/${o.id}">
           <span>#${o.id} — ${o.customer_name}</span>
@@ -361,29 +366,19 @@
       });
     }
     if (data.projects && data.projects.length) {
-      html += '<div class="search-group">📁 Projekti</div>';
+      html += '<div class="search-group">📁 {{ "Projects" if is_en else "Projekti" }}</div>';
       data.projects.forEach(p => {
         html += `<a class="search-item" href="/projects/${p.id}">
           <span><b>${p.code || ''}</b> — ${p.name}</span>
         </a>`;
       });
     }
-    if (!html) html = '<div class="search-empty">Nema rezultata.</div>';
+    if (!html) html = '<div class="search-empty">{{ "No results." if is_en else "Nema rezultata." }}</div>';
     searchResults.innerHTML = html;
   }
 </script>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
-<script>
-  // PWA — Service Worker registracija
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then((reg) => console.log('[PWA] SW registrovan:', reg.scope))
-        .catch((err) => console.warn('[PWA] SW greška:', err));
-    });
-  }
-</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

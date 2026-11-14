@@ -1,84 +1,134 @@
 # mailer.py
 """
-Email notifikacije za MicroStock.
-- Sends via Flask-Mail (Gmail SMTP)
-- Templates su inline (HTML + plain text fallback)
-- Sve funkcije vraćaju True/False (ne dižu exception da ne sruše request)
+Email notifikacije za MicroStockApp (Standalone Edition).
+- Čita SMTP parametre direktno iz baze (app_settings) koje kupac sam unese.
+- Ne zavisi od .env fajla niti od programerovog Gmail naloga.
+- Sve funkcije vraćaju True/False i nikada ne ruše request.
 """
 import os
+import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 from flask import current_app
-from flask_mail import Mail, Message
-import base64
-from pathlib import Path
+from flask_mail import Mail
+
+from database import get_app_settings
+
 mail = Mail()
 
 
 def init_mail(app):
-    """Pozovi iz app.py: init_mail(app)"""
-    app.config.update(
-        MAIL_SERVER=os.getenv("MAIL_SERVER", "smtp.gmail.com"),
-        MAIL_PORT=int(os.getenv("MAIL_PORT", "587")),
-        MAIL_USE_TLS=os.getenv("MAIL_USE_TLS", "true").lower() == "true",
-        MAIL_USERNAME=os.getenv("MAIL_USERNAME"),
-        MAIL_PASSWORD=os.getenv("MAIL_PASSWORD"),
-        MAIL_DEFAULT_SENDER=os.getenv("MAIL_DEFAULT_SENDER", os.getenv("MAIL_USERNAME")),
-        MAIL_SUPPRESS_SEND=not os.getenv("MAIL_USERNAME"),  # ako nema creds, samo loguj
-    )
+    """Zadržano zbog kompatibilnosti sa app.py."""
     mail.init_app(app)
 
 
-def _alert_recipient():
-    return os.getenv("ALERT_EMAIL") or os.getenv("MAIL_USERNAME")
+def _get_smtp_config():
+    """Povlači trenutna SMTP podešavanja kupca iz baze (app_settings)."""
+    s = get_app_settings()
+    server = (s.get("smtp_server") or os.getenv("MAIL_SERVER") or "smtp.gmail.com").strip()
+    port = int(s.get("smtp_port") or os.getenv("MAIL_PORT") or 587)
+    use_tls = bool(s.get("smtp_use_tls", 1))
+    user = (s.get("smtp_username") or os.getenv("MAIL_USERNAME") or "").strip()
+    password = (s.get("smtp_password") or os.getenv("MAIL_PASSWORD") or "").strip()
+    company = (s.get("company_name") or "MicroStock").strip()
+    alert_to = (s.get("alert_email") or os.getenv("ALERT_EMAIL") or user).strip()
+
+    return {
+        "server": server,
+        "port": port,
+        "use_tls": use_tls,
+        "user": user,
+        "password": password,
+        "sender": f"{company} <{user}>" if user else "",
+        "alert_to": alert_to,
+        "company": company,
+    }
 
 
-def _send(subject, html, text=None):
-    """Wrap za slanje — nikad ne ruši request."""
+def _send_raw_email(to_email, subject, html, text=None, pdf_bytes=None, pdf_filename=None):
+    """Dinamičko slanje emaila pomoću podataka iz app_settings tabele."""
+    cfg = _get_smtp_config()
+    if not cfg["user"] or not cfg["password"] or not to_email:
+        if current_app:
+            current_app.logger.warning("MAIL: SMTP nije podešen u Settings-u, preskačem slanje.")
+        return False
+
     try:
-        to = _alert_recipient()
-        if not to:
-            current_app.logger.warning("MAIL: nema ALERT_EMAIL, preskačem.")
-            return False
-        msg = Message(subject=subject, recipients=[to])
-        msg.html = html
-        msg.body = text or _html_to_text(html)
-        mail.send(msg)
-        current_app.logger.info(f"MAIL: poslato → {to} | {subject}")
+        msg = MIMEMultipart("mixed")
+        msg["Subject"] = subject
+        msg["From"] = cfg["sender"]
+        msg["To"] = to_email
+
+        alt = MIMEMultipart("alternative")
+        plain_body = text or _html_to_text(html)
+        alt.attach(MIMEText(plain_body, "plain", "utf-8"))
+        alt.attach(MIMEText(html, "html", "utf-8"))
+        msg.attach(alt)
+
+        if pdf_bytes and pdf_filename:
+            part = MIMEApplication(pdf_bytes, _subtype="pdf")
+            part.add_header("Content-Disposition", "attachment", filename=pdf_filename)
+            msg.attach(part)
+
+        with smtplib.SMTP(cfg["server"], cfg["port"], timeout=15) as server:
+            if cfg["use_tls"]:
+                server.starttls()
+            server.login(cfg["user"], cfg["password"])
+            server.send_message(msg)
+
+        if current_app:
+            current_app.logger.info(f"MAIL: poslato -> {to_email} | {subject}")
         return True
     except Exception as e:
-        current_app.logger.error(f"MAIL greška: {e}")
+        if current_app:
+            current_app.logger.error(f"MAIL greška: {e}")
+        else:
+            print(f"MAIL greška: {e}")
         return False
 
 
+def _send(subject, html, text=None):
+    cfg = _get_smtp_config()
+    return _send_raw_email(cfg["alert_to"], subject, html, text=text)
+
+
+def _send_to(to_email, subject, html):
+    return _send_raw_email(to_email, subject, html)
+
+
 def _html_to_text(html):
-    """Grubi fallback ako nema plain text-a."""
-    import re
     return re.sub(r"<[^>]+>", "", html).strip()
 
 
 # ============================================================
-# ŠABLONI
+# ŠABLON (Personalizovan prema firmi kupca)
 # ============================================================
 
 def _wrap(title, color, body_html):
-    """Email šablon sa logom u header-u (URL do javne slike)."""
-    import os
-    base_url = os.getenv("PUBLIC_URL", "https://microstock.onrender.com")
-    logo_url = f"{base_url}/static/img/logo-wordmark.png"
+    cfg = _get_smtp_config()
+    company_name = cfg["company"]
+    contact_email = cfg["alert_to"] or cfg["user"]
+    DARK = "#0f172a"
 
-    DARK = "#0f172a"   # tamna boja iz sidebar-a
+    footer_contact = (
+        f'<a href="mailto:{contact_email}" style="color:#6366f1;text-decoration:none">{contact_email}</a>'
+        if contact_email else company_name
+    )
 
     return f"""
     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;
                 border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
 
-      <div style="background:{DARK};padding:24px 20px;text-align:center">
-        <img src="{logo_url}" alt="MicroStock"
-             style="max-width:180px;height:auto;display:block;margin:0 auto">
+      <div style="background:{DARK};padding:20px;text-align:center;color:#ffffff;
+                  font-size:20px;font-weight:700;letter-spacing:0.5px">
+        📦 {company_name}
       </div>
 
       <div style="background:{color};color:#fff;padding:12px 20px 16px;
                   text-align:center;font-size:16px;font-weight:700">
-        MicroStock — {title}
+        {title}
       </div>
 
       <div style="padding:20px;color:#111827;font-size:14px;line-height:1.6">
@@ -87,61 +137,47 @@ def _wrap(title, color, body_html):
 
       <div style="background:#f9fafb;color:#6b7280;padding:12px 20px;
                   font-size:12px;border-top:1px solid #e5e7eb;text-align:center">
-        Automatska poruka iz MicroStock. Ne odgovaraj na ovaj email.<br>
-        <a href="mailto:alexalbekstudio.design@gmail.com"
-           style="color:#6366f1;text-decoration:none">
-          alexalbekstudio.design@gmail.com
-        </a>
+        Automatska notifikacija iz vašeg MicroStock sistema.<br>
+        {footer_contact}
       </div>
     </div>
     """
 
 
 # ============================================================
-# 1) PROJEKAT — 80% budžeta (warn)
+# NOTIFIKACIJE I IZVEŠTAJI
 # ============================================================
+
 def send_project_warn(project, pct, spent, budget):
     subject = f"⚠️ Projekat '{project['name']}' je na {pct:.0f}% budžeta"
     body = f"""
       <p>Projekat <b>{project['name']}</b>
          ({project.get('client') or 'bez klijenta'}) je prešao <b>80% budžeta</b>.</p>
       <table style="border-collapse:collapse;margin:12px 0">
-        <tr><td style="padding:4px 12px 4px 0"><b>Budžet:</b></td>
-            <td>{budget:.2f} €</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Potrošeno:</b></td>
-            <td>{spent:.2f} €</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Iskorišćeno:</b></td>
-            <td><b>{pct:.1f}%</b></td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><b>Budžet:</b></td><td>{budget:.2f} €</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><b>Potrošeno:</b></td><td>{spent:.2f} €</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><b>Iskorišćeno:</b></td><td><b>{pct:.1f}%</b></td></tr>
       </table>
       <p>Preporuka: proveri troškove i preostale sate tima.</p>
     """
     return _send(subject, _wrap("Alarm budžeta", "#f59e0b", body))
 
 
-# ============================================================
-# 2) PROJEKAT — 100% budžeta (danger)
-# ============================================================
 def send_project_danger(project, pct, spent, budget):
-    subject = f"🚨 KREŠENJE: Projekat '{project['name']}' je prekoračio budžet"
+    subject = f"🚨 PREKORAČENJE: Projekat '{project['name']}' je prekoračio budžet"
     body = f"""
       <p>Projekat <b>{project['name']}</b>
          ({project.get('client') or 'bez klijenta'}) je prekoračio <b>100% budžeta</b>!</p>
       <table style="border-collapse:collapse;margin:12px 0">
-        <tr><td style="padding:4px 12px 4px 0"><b>Budžet:</b></td>
-            <td>{budget:.2f} €</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Potrošeno:</b></td>
-            <td>{spent:.2f} €</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><b>Budžet:</b></td><td>{budget:.2f} €</td></tr>
+        <tr><td style="padding:4px 12px 4px 0"><b>Potrošeno:</b></td><td>{spent:.2f} €</td></tr>
         <tr><td style="padding:4px 12px 4px 0"><b>Prekoračenje:</b></td>
             <td><b style="color:#dc2626">{spent - budget:.2f} €</b></td></tr>
       </table>
-      <p>Hitno: zaustavi dodatne troškove ili dogovori dodatni budžet sa klijentom.</p>
     """
     return _send(subject, _wrap("Kritično prekoračenje", "#dc2626", body))
 
 
-# ============================================================
-# 3) NISKE ZALIHE (dnevni digest)
-# ============================================================
 def send_low_stock_digest(products):
     if not products:
         return False
@@ -168,9 +204,6 @@ def send_low_stock_digest(products):
     return _send(subject, _wrap("Niske zalihe", "#2563eb", body))
 
 
-# ============================================================
-# 4) NARUDŽBINE KOJE ČEKAJU
-# ============================================================
 def send_pending_orders_digest(orders, days):
     if not orders:
         return False
@@ -178,7 +211,7 @@ def send_pending_orders_digest(orders, days):
         f"<tr><td style='padding:4px 12px 4px 0'>#{o['id']}</td>"
         f"<td style='padding:4px 12px 4px 0'>{o.get('customer') or '—'}</td>"
         f"<td style='padding:4px 12px 4px 0'>{o.get('status')}</td>"
-        f"<td style='padding:4px 12px 4px 0'>{o.get('created_at', '')[:10]}</td></tr>"
+        f"<td style='padding:4px 12px 4px 0'>{str(o.get('created_at', ''))[:10]}</td></tr>"
         for o in orders
     )
     subject = f"⏳ {len(orders)} narudžbina čeka duže od {days} dana"
@@ -197,16 +230,13 @@ def send_pending_orders_digest(orders, days):
     return _send(subject, _wrap("Narudžbine koje čekaju", "#f59e0b", body))
 
 
-# ============================================================
-# 5) ROKOVI PROJEKATA (14 dana)
-# ============================================================
 def send_deadlines_digest(projects):
     if not projects:
         return False
     rows = "".join(
         f"<tr><td style='padding:4px 12px 4px 0'>{p['name']}</td>"
         f"<td style='padding:4px 12px 4px 0'>{p.get('client') or '—'}</td>"
-        f"<td style='padding:4px 12px 4px 0'>{p.get('deadline', '')[:10]}</td></tr>"
+        f"<td style='padding:4px 12px 4px 0'>{str(p.get('deadline', ''))[:10]}</td></tr>"
         for p in projects
     )
     subject = f"📅 {len(projects)} projekat(a) sa rokom u narednih 14 dana"
@@ -224,53 +254,23 @@ def send_deadlines_digest(projects):
     return _send(subject, _wrap("Rokovi projekata", "#7c3aed", body))
 
 
-# ============================================================
-# TEST
-# ============================================================
 def send_test_email():
     return _send(
         "✅ MicroStock test email",
-        _wrap("Test", "#10b981",
-              "<p>Ako vidiš ovu poruku — email alarmi rade ispravno. 🎉</p>")
+        _wrap("Test konekcije", "#10b981",
+              "<p>Vaša SMTP email podešavanja su ispravno konfigurisana! 🎉</p>")
     )
 
+
 def send_report_email(to_email, subject, html_body, pdf_bytes=None, pdf_filename=None):
-    """
-    Šalje izveštaj sa opcionim PDF attachment-om.
-    Ne koristi _send() jer _send() uvek šalje na ALERT_EMAIL.
-    """
-    try:
-        if not to_email:
-            current_app.logger.warning("REPORT: nema REPORT_EMAIL, preskačem.")
-            return False
+    return _send_raw_email(to_email, subject, html_body, pdf_bytes=pdf_bytes, pdf_filename=pdf_filename)
 
-        msg = Message(subject=subject, recipients=[to_email])
-        msg.html = html_body
-        msg.body = _html_to_text(html_body)
-
-        if pdf_bytes and pdf_filename:
-            msg.attach(
-                filename=pdf_filename,
-                content_type="application/pdf",
-                data=pdf_bytes,
-            )
-
-        mail.send(msg)
-        current_app.logger.info(f"REPORT: poslato → {to_email} | {subject}")
-        return True
-    except Exception as e:
-        current_app.logger.error(f"REPORT greška: {e}")
-        return False
 
 def send_password_reset(to_email, reset_url):
-    """
-    Šalje email sa linkom za reset šifre.
-    Vraća True/False.
-    """
-    subject = "🔐 MicroStock — Reset šifre"
+    subject = "🔐 Reset šifre"
     body = f"""
       <p>Zdravo,</p>
-      <p>Neko je zatražio reset šifre za tvoj MicroStock nalog.</p>
+      <p>Zatražen je reset šifre za vaš nalog.</p>
       <p style="margin:24px 0">
         <a href="{reset_url}"
            style="background:#6366f1;color:#fff;padding:12px 24px;
@@ -278,160 +278,31 @@ def send_password_reset(to_email, reset_url):
           Postavi novu šifru
         </a>
       </p>
-      <p>Ili kopiraj ovaj link u browser:</p>
       <p style="background:#f3f4f6;padding:8px 12px;border-radius:4px;
                 font-family:monospace;font-size:12px;word-break:break-all">
         {reset_url}
       </p>
-      <p><b>Link važi 1 sat.</b> Ako nisi ti zatražio reset — ignoriši ovaj email.</p>
     """
     return _send_to(to_email, subject, _wrap("Reset šifre", "#6366f1", body))
 
 
-def _send_to(to_email, subject, html):
-    """Kao _send, ali na proizvoljan email (ne ALERT_EMAIL)."""
-    try:
-        if not to_email:
-            return False
-        msg = Message(subject=subject, recipients=[to_email])
-        msg.html = html
-        msg.body = _html_to_text(html)
-        mail.send(msg)
-        current_app.logger.info(f"MAIL: poslato → {to_email} | {subject}")
-        return True
-    except Exception as e:
-        current_app.logger.error(f"MAIL greška: {e}")
-        return False
-
-# ============================================================
-# 6) PRETPLATA ISTIČE (7 dana pre)
-# ============================================================
-def send_subscription_expiring(to_email, user_name, plan_label, end_date, days_left):
-    """
-    Podsetnik korisniku da pretplata ističe.
-    to_email: email korisnika
-    days_left: broj dana do isteka
-    """
-    subject = f"⏰ Tvoja {plan_label} pretplata ističe za {days_left} dana"
-    body = f"""
-      <p>Zdravo {user_name or 'korisniče'},</p>
-      <p>Tvoja <b>{plan_label}</b> pretplata na MicroStock ističe
-         <b>{end_date}</b> ({days_left} dana).</p>
-      <p>Da nastaviš bez prekida, obnovi pretplatu na vreme.</p>
-      <p style="margin:24px 0">
-        <a href="mailto:alexalbekstudio.design@gmail.com?subject=Obnova pretplate"
-           style="background:#6366f1;color:#fff;padding:12px 24px;
-                  border-radius:6px;text-decoration:none;font-weight:600">
-          Obnovi pretplatu
-        </a>
-      </p>
-      <p class="muted small">Ako ne obnoviš, nalog ostaje aktivan, ali pretplata prelazi u status „istekla".</p>
-    """
-    return _send_to(to_email, subject, _wrap("Pretplata ističe", "#f59e0b", body))
+def send_subscription_expiring(*args, **kwargs):
+    return True
 
 
-def send_subscription_expiring_admin(user_email, user_name, plan_label, end_date, days_left):
-    """Podsetnik adminu da nekom korisniku ističe pretplata."""
-    subject = f"⏰ Pretplata ističe: {user_email} ({plan_label})"
-    body = f"""
-      <p>Pretplata korisnika <b>{user_name or user_email}</b> ističe za <b>{days_left} dana</b>.</p>
-      <table style="border-collapse:collapse;margin:12px 0">
-        <tr><td style="padding:4px 12px 4px 0"><b>Email:</b></td><td>{user_email}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Paket:</b></td><td>{plan_label}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Ističe:</b></td><td>{end_date}</td></tr>
-      </table>
-      <p>Preporuka: kontaktiraj korisnika za obnovu.</p>
-    """
-    return _send(subject, _wrap("Pretplata ističe", "#f59e0b", body))
+def send_subscription_expiring_admin(*args, **kwargs):
+    return True
 
 
-# ============================================================
-# 7) LIMIT PAKETA (80% iskorišćenosti)
-# ============================================================
-def send_package_limit_warning(to_email, user_name, plan_label, resource, current, max_value, pct):
-    """
-    Upozorenje korisniku da je blizu limita paketa.
-    resource: 'proizvoda' ili 'narudžbina'
-    """
-    subject = f"⚠️ Blizu si limita paketa {plan_label} — {pct:.0f}% iskorišćeno"
-    body = f"""
-      <p>Zdravo {user_name or 'korisniče'},</p>
-      <p>Na paketu <b>{plan_label}</b> iskoristio si
-         <b>{current} od {max_value}</b> dozvoljenih {resource} ({pct:.0f}%).</p>
-      <p>Kada pređeš limit, nećeš moći da dodaješ nove {resource}.</p>
-      <p>Predlog: nadogradi na viši paket i nastavi bez ograničenja.</p>
-      <p style="margin:24px 0">
-        <a href="mailto:alexalbekstudio.design@gmail.com?subject=Nadogradnja paketa"
-           style="background:#6366f1;color:#fff;padding:12px 24px;
-                  border-radius:6px;text-decoration:none;font-weight:600">
-          Nadogradi paket
-        </a>
-      </p>
-    """
-    return _send_to(to_email, subject, _wrap("Limit paketa", "#f59e0b", body))
+def send_package_limit_warning(*args, **kwargs):
+    return True
 
 
-# ============================================================
-# 8) ADMIN DNEVNI REPORT (nove metrike)
-# ============================================================
 def send_admin_daily_report(kpi, logins, features, expiring):
-    """
-    Dnevni admin report — aktivnost + pretplate koje ističu.
-    """
-    if expiring:
-        expiring_rows = "".join(
-            f"<tr><td style='padding:4px 12px 4px 0'>{e['email']}</td>"
-            f"<td style='padding:4px 12px 4px 0'>{e['plan_label']}</td>"
-            f"<td style='padding:4px 12px 4px 0'>{e['end_date']}</td>"
-            f"<td style='padding:4px 12px 4px 0'><b>{e['days_left']} d</b></td></tr>"
-            for e in expiring
-        )
-        expiring_html = f"""
-          <h3>⏰ Pretplate koje ističu (7 dana)</h3>
-          <table style="border-collapse:collapse">
-            <tr style="background:#f3f4f6">
-              <th style="padding:6px 12px 6px 0;text-align:left">Email</th>
-              <th style="padding:6px 12px 6px 0;text-align:left">Paket</th>
-              <th style="padding:6px 12px 6px 0;text-align:left">Ističe</th>
-              <th style="padding:6px 12px 6px 0;text-align:left">Dana</th>
-            </tr>
-            {expiring_rows}
-          </table>
-        """
-    else:
-        expiring_html = "<p><i>Nema pretplata koje ističu u narednih 7 dana.</i></p>"
-
-    features_rows = "".join(
-        f"<tr><td style='padding:4px 12px 4px 0'>{f['feature_code']}</td>"
-        f"<td style='padding:4px 12px 4px 0'>{f['total']}</td></tr>"
-        for f in features
-    ) or "<tr><td colspan='2'><i>Nema akcija danas.</i></td></tr>"
-
-    subject = f"📊 MicroStock dnevni report — {kpi['logins_today']} logina danas"
+    subject = f"📊 Dnevni izveštaj sistema — {kpi.get('logins_today', 0)} prijava danas"
     body = f"""
       <h3>📊 Današnja aktivnost</h3>
-      <table style="border-collapse:collapse;margin:12px 0">
-        <tr><td style="padding:4px 12px 4px 0"><b>Aktivni korisnici (7d):</b></td>
-            <td>{kpi['active_7']}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Logini danas:</b></td>
-            <td>{kpi['logins_today']}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Akcije (30d):</b></td>
-            <td>{kpi['actions_period']}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Ukupno korisnika:</b></td>
-            <td>{kpi['total_users']}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0"><b>Aktivne pretplate:</b></td>
-            <td>{kpi['active_subs']}</td></tr>
-      </table>
-
-      <h3>⚡ Top funkcije (30 dana)</h3>
-      <table style="border-collapse:collapse">
-        <tr style="background:#f3f4f6">
-          <th style="padding:6px 12px 6px 0;text-align:left">Funkcija</th>
-          <th style="padding:6px 12px 6px 0;text-align:left">Poziva</th>
-        </tr>
-        {features_rows}
-      </table>
-
-      {expiring_html}
+      <p>Ukupno korisnika: <b>{kpi.get('total_users', 1)}</b></p>
+      <p>Akcije (30d): <b>{kpi.get('actions_period', 0)}</b></p>
     """
-    return _send(subject, _wrap("Dnevni report", "#6366f1", body))
+    return _send(subject, _wrap("Dnevni izveštaj", "#6366f1", body))

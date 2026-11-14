@@ -1,104 +1,128 @@
 # limits.py
-from datetime import date
+"""
+Upravljanje paketima i modulima za Standalone (One-Time Purchase) verziju.
+Podržava 3 osnovna paketa (Core, Pro, Ultimate) + pojedinačne doplate za module (Add-ons).
+"""
 from db_adapter import connect
+from database import get_app_settings
 
-# Pravila i ograničenja paketa
+# Pravila za jednokratne pakete (zadržani i stari ključevi radi 100% kompatibilnosti sa template-ima)
 PLANS = {
-    "trial": {
-        "max_products": 50,
-        "max_orders_per_month": 100,
+    "core": {
+        "label": "Core (Osnovni)",
+        "max_products": float("inf"),
+        "max_orders_per_month": float("inf"),
         "max_users": 1,
-        "has_analytics": True,
-        "has_projects": True,
-        "has_suppliers": True,
-        "has_recipes": True,
-    },
-    "starter": {
-        "max_products": 50,
-        "max_orders_per_month": 100,
-        "max_users": 1,
-        "has_analytics": False,      # Starter nema punu analitiku
-        "has_projects": False,       # Nema praćenje projekata
-        "has_suppliers": False,      # Nema nabavku i dobavljače
+        "has_analytics": False,
+        "has_suppliers": False,
+        "has_projects": False,
         "has_recipes": False,
     },
     "pro": {
-        "max_products": float("inf"), # Neograničeno
+        "label": "Pro (Poslovni)",
+        "max_products": float("inf"),
         "max_orders_per_month": float("inf"),
         "max_users": 5,
         "has_analytics": True,
-        "has_projects": True,
         "has_suppliers": True,
+        "has_projects": False,
         "has_recipes": True,
     },
-    "business": {
+    "ultimate": {
+        "label": "Ultimate (Komplet)",
         "max_products": float("inf"),
         "max_orders_per_month": float("inf"),
         "max_users": float("inf"),
         "has_analytics": True,
-        "has_projects": True,
         "has_suppliers": True,
+        "has_projects": True,
+        "has_recipes": True,
+    },
+    # Alias mapiranje za stari kod ako negde traži 'starter', 'business' ili 'trial'
+    "starter": {
+        "label": "Core (Osnovni)",
+        "max_products": float("inf"),
+        "max_orders_per_month": float("inf"),
+        "max_users": 1,
+        "has_analytics": False,
+        "has_suppliers": False,
+        "has_projects": False,
+        "has_recipes": False,
+    },
+    "business": {
+        "label": "Ultimate (Komplet)",
+        "max_products": float("inf"),
+        "max_orders_per_month": float("inf"),
+        "max_users": float("inf"),
+        "has_analytics": True,
+        "has_suppliers": True,
+        "has_projects": True,
+        "has_recipes": True,
+    },
+    "trial": {
+        "label": "Ultimate (Demo)",
+        "max_products": float("inf"),
+        "max_orders_per_month": float("inf"),
+        "max_users": float("inf"),
+        "has_analytics": True,
+        "has_suppliers": True,
+        "has_projects": True,
         "has_recipes": True,
     }
 }
 
-def get_user_plan_context(user_id):
+
+def get_user_plan_context(user_id=None):
     """
-    Vraća plan, status i dozvoljene limite za datog korisnika.
+    U Standalone verziji licenca je trajna (is_active = True) i čita se iz app_settings.
+    Takođe proverava pojedinačno dokupljene dodatke (add-ons).
     """
-    conn = connect()
-    try:
-        sub = conn.execute("""
-            SELECT * FROM subscriptions 
-            WHERE user_id = %s 
-            ORDER BY id DESC LIMIT 1
-        """, (user_id,)).fetchone()
-    finally:
-        conn.close()
+    settings = get_app_settings()
+    tier = (settings.get("license_tier") or "ultimate").lower()
 
-    today = date.today()
-    if not sub:
-        return "expired", False, PLANS["starter"]
+    base_rules = dict(PLANS.get(tier, PLANS["ultimate"]))
 
-    plan_name = (sub.get("plan_name") or "starter").lower()
-    end_date = sub.get("end_date")
-    status = sub.get("status")
+    # Ako je kupac na Core ili Pro paketu, a dokupio je pojedinačni modul (+25€ / +30€):
+    if settings.get("addon_analytics"):
+        base_rules["has_analytics"] = True
+    if settings.get("addon_suppliers"):
+        base_rules["has_suppliers"] = True
+    if settings.get("addon_projects"):
+        base_rules["has_projects"] = True
+    if settings.get("addon_recipes"):
+        base_rules["has_recipes"] = True
 
-    # Provera validnosti datuma
-    is_active = (status == "active") and (end_date is not None) and (end_date >= today)
-
-    if not is_active:
-        return plan_name, False, PLANS["starter"]
-
-    return plan_name, True, PLANS.get(plan_name, PLANS["starter"])
+    return tier, True, base_rules
 
 
 def can_add_product(user_id):
-    """Proverava da li korisnik sme da doda novi proizvod."""
+    """U Standalone verziji broj proizvoda nije ograničen."""
     plan, is_active, rules = get_user_plan_context(user_id)
-    if not is_active:
-        return False, "Pretplata je istekla. Obnovite pretplatu na stranici Pretplata."
+    if rules["max_products"] == float("inf"):
+        return True, None
 
     conn = connect()
     try:
-        row = conn.execute("SELECT COUNT(*) AS total FROM products WHERE user_id = %s AND active = 1", (user_id,)).fetchone()
+        row = conn.execute(
+            "SELECT COUNT(*) AS total FROM products WHERE user_id = %s AND active = 1",
+            (user_id,)
+        ).fetchone()
         current_count = row["total"] if row else 0
     finally:
         conn.close()
 
     if current_count >= rules["max_products"]:
-        return False, f"Dostigli ste limit od {rules['max_products']} proizvoda za paket '{plan.upper()}'. Pređite na Pro paket za neograničeno."
+        return False, f"Dostigli ste limit od {rules['max_products']} proizvoda za paket '{plan.upper()}'."
 
     return True, None
 
 
 def can_add_order(user_id):
-    """Proverava mesečni limit porudžbina."""
+    """U Standalone verziji broj porudžbina nije ograničen."""
     plan, is_active, rules = get_user_plan_context(user_id)
-    if not is_active:
-        return False, "Pretplata je istekla. Obnovite pretplatu na stranici Pretplata."
+    if rules["max_orders_per_month"] == float("inf"):
+        return True, None
 
-    # Broj porudžbina u tekućem mesecu
     conn = connect()
     try:
         row = conn.execute("""
@@ -111,6 +135,6 @@ def can_add_order(user_id):
         conn.close()
 
     if current_orders >= rules["max_orders_per_month"]:
-        return False, f"Dostigli ste mesečni limit od {rules['max_orders_per_month']} narudžbina za paket '{plan.upper()}'."
+        return False, f"Dostigli ste mesečni limit od {rules['max_orders_per_month']} narudžbina."
 
     return True, None
