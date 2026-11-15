@@ -9,7 +9,6 @@ pip install pywebview pyinstaller
 
 pyinstaller --noconfirm --onedir --windowed ^
   --name "MicroStockApp" ^
-  --icon "static/img/logo-icon.png" ^
   --add-data "templates;templates" ^
   --add-data "static;static" ^
   --add-data "fonts;fonts" ^

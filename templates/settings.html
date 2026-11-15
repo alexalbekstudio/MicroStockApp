@@ -36,7 +36,7 @@
         </div>
         {% if has_custom_logo %}
         <div style="display:flex; align-items:center; gap:1rem;">
-          <img src="{{ url_for('static', filename='img/company-logo.png') }}" alt="Logo" style="max-height: 44px; border:1px solid #cbd5e1; padding:4px; border-radius:6px; background:#fff;">
+          <img src="{{ url_for('serve_company_logo') }}" alt="Logo" style="max-height: 44px; border:1px solid #cbd5e1; padding:4px; border-radius:6px; background:#fff;">
           <button type="submit" name="action" value="remove_logo" class="btn btn--secondary" style="color:#ef4444;">
             🗑️ {{ 'Remove Logo' if is_en else 'Ukloni logo' }}
           </button>

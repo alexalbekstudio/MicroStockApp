@@ -9,6 +9,7 @@ Generator PDF faktura i nalepnica koristeći fpdf2 sa Unicode fontom (DejaVuSans
 import io
 import re
 import qrcode
+import sys
 from pathlib import Path
 from datetime import datetime
 from fpdf import FPDF
@@ -21,7 +22,11 @@ FONT_REGULAR = FONT_DIR / "DejaVuSans.ttf"
 FONT_BOLD = FONT_DIR / "DejaVuSans-Bold.ttf"
 
 # --- Opcioni logo kupca (uploadovan kroz Settings) ---
-CUSTOM_LOGO_PATH = Path(__file__).parent / "static" / "img" / "company-logo.png"
+if getattr(sys, "frozen", False):
+    _APP_DIR = Path(sys.executable).parent
+else:
+    _APP_DIR = Path(__file__).parent
+CUSTOM_LOGO_PATH = _APP_DIR / "company-logo.png"
 
 # --- Boje ---
 CRNA = (17, 17, 17)

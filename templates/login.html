@@ -11,11 +11,15 @@
   <div class="login-box">
 
     {# ===== LOGO BLOK ===== #}
-    <div class="login-brand">
-      <img src="{{ url_for('static', filename='img/logo-icon.png') }}"
-           alt="ALEXANDAR" class="login-brand__icon">
-      <img src="{{ url_for('static', filename='img/logo-wordmark.png') }}"
-           alt="ALEXANDAR" class="login-brand__wordmark">
+    <div style="text-align: center; margin-bottom: 1rem;">
+      {% if has_custom_logo %}
+        <img src="{{ url_for('serve_company_logo') }}"
+             alt="Logo" style="max-height: 64px; width: auto; max-width: 220px; object-fit: contain; margin-bottom: 0.5rem;">
+      {% endif %}
+      <div style="font-size: 1.5rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+        <span>📦</span>
+        <span>{{ app_cfg.company_name if (app_cfg and app_cfg.company_name and app_cfg.company_name != 'Moja Firma') else 'MicroStock' }}</span>
+      </div>
     </div>
 
     <div class="login-sep"></div>
@@ -43,16 +47,6 @@
       </label>
       <button type="submit" class="login-submit">{{ t("login_button") }}</button>
     </form>
-
-  <div style="text-align:center; margin-top:1rem">
-    <a href="{{ url_for('demo_login') }}"
-      style="display:block; width:100%; text-align:center; padding:.75rem;
-              border:1px dashed #6366f1; color:#6366f1; border-radius:8px;
-              text-decoration:none; font-weight:600; font-size:.95rem;
-              transition: background .15s">
-      🎯 Pogledaj demo (bez registracije)
-    </a>
-  </div>
 
     <p class="login-hint" style="margin-top:.75rem; padding-top:.75rem">
       <a href="{{ url_for('forgot_password') }}">{{ t("forgot_password_link") }}</a>

@@ -15,8 +15,14 @@ from contextlib import contextmanager
 
 log = logging.getLogger(__name__)
 
-SQLITE_DB_PATH = Path(__file__).parent / "microstock_local.db"
-SQLITE_DEMO_PATH = Path(__file__).parent / "microstock_demo.db"
+import sys
+if getattr(sys, "frozen", False):
+    _APP_DIR = Path(sys.executable).parent
+else:
+    _APP_DIR = Path(__file__).parent
+
+SQLITE_DB_PATH = _APP_DIR / "microstock_local.db"
+SQLITE_DEMO_PATH = _APP_DIR / "microstock_demo.db"
 
 
 def _should_use_postgres() -> bool:

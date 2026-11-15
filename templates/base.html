@@ -11,9 +11,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MicroStock">
-<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/logo-icon.png') }}">
+<link rel="icon" type="image/png" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/favicon.ico">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/logo-icon.png') }}">
 <script>
   window.CURRENCY_RATES = {
     RSD: 1,
@@ -44,11 +44,11 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar__brand" style="padding: 16px 20px;">
       {% if has_custom_logo %}
-        <img src="{{ url_for('static', filename='img/company-logo.png') }}"
-             alt="Logo" style="max-height: 42px; width: auto; max-width: 180px; object-fit: contain;">
+        <img src="{{ url_for('serve_company_logo') }}"
+            alt="Logo" style="max-height: 44px; width: auto; max-width: 180px; object-fit: contain;">
       {% else %}
         <div style="font-size: 18px; font-weight: 800; color: #f8fafc; letter-spacing: 0.5px;">
-          🏢 {{ app_cfg.company_name if (app_cfg and app_cfg.company_name) else 'Moja Firma' }}
+          🏢 {{ app_cfg.company_name if (app_cfg and app_cfg.company_name) else 'MicroStock' }}
         </div>
       {% endif %}
     </div>

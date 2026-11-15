@@ -7,6 +7,9 @@ from pathlib import Path
 from db_adapter import connect
 
 SCHEMA = Path(__file__).parent / "schema.sql"
+schema_path = Path(__file__).parent / "schema.sql"
+with open(schema_path, "r", encoding="utf-8") as f:
+    schema_sql = f.read()
 
 
 def init_db():

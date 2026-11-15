@@ -43,40 +43,67 @@ init_scheduler(app)
 
 # ==================== ADMIN TRACKING ====================
 
+def _msg(sr: str, en: str) -> str:
+    """Vraća poruku na srpskom ili engleskom u zavisnosti od aktivnog jezika."""
+    return en if get_locale() == "en" else sr
+
+
+def _custom_logo_path():
+    import sys
+    from pathlib import Path
+    base = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+    return base / "company-logo.png"
+
+
 @app.context_processor
 def inject_standalone_context():
-    from pathlib import Path
     cfg = get_app_settings()
     _, _, rules = get_user_plan_context()
-    has_logo = (Path(__file__).parent / "static" / "img" / "company-logo.png").exists()
     return {
         "app_cfg": cfg,
         "plan_rules": rules,
-        "has_custom_logo": has_logo,
+        "has_custom_logo": _custom_logo_path().exists(),
     }
+
+
+@app.route("/company-logo.png")
+def serve_company_logo():
+    logo = _custom_logo_path()
+    if logo.exists():
+        return send_file(logo, mimetype="image/png", max_age=0)
+    abort(404)
+
+
+@app.route("/favicon.ico")
+def favicon():
+    logo = _custom_logo_path()
+    if logo.exists():
+        return send_file(logo, mimetype="image/png", max_age=0)
+    import base64
+    empty_png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    )
+    return Response(empty_png, mimetype="image/png")
+
 
 @app.route("/settings", methods=["GET", "POST"])
 @login_required
 def system_settings():
-    from pathlib import Path
-    logo_path = Path(__file__).parent / "static" / "img" / "company-logo.png"
+    logo_path = _custom_logo_path()
 
     if request.method == "POST":
-        # Brisanje logotipa ako je kupac kliknuo "Ukloni logo"
         if request.form.get("action") == "remove_logo":
             if logo_path.exists():
                 logo_path.unlink()
             flash(_msg("Logo firme je uklonjen.", "Company logo removed."), "ok")
             return redirect(url_for("system_settings"))
 
-        # Upload novog logotipa ako je izabran fajl
         logo_file = request.files.get("company_logo")
         if logo_file and logo_file.filename:
             try:
                 from PIL import Image
                 img = Image.open(logo_file.stream).convert("RGBA")
                 img.thumbnail((400, 140))
-                logo_path.parent.mkdir(parents=True, exist_ok=True)
                 img.save(str(logo_path), format="PNG")
             except Exception as e:
                 flash(_msg(f"Greška pri čuvanju logotipa: {e}", f"Logo upload error: {e}"), "err")
@@ -155,11 +182,6 @@ def _track_user_activity():
         path=path,
         response_code=None,   # ne znamo još u before_request
     )
-
-@app.route("/favicon.ico")
-def favicon():
-    from flask import send_from_directory
-    return send_from_directory("static/img", "logo-icon.png", mimetype="image/png")
 
 # ==================== JINJA GLOBALNE ====================
 
@@ -251,63 +273,6 @@ def set_currency(cur):
     flash("Valuta promenjena.", "ok")
     return redirect(request.referrer or url_for("index"))
 
-# ==================== DEMO MOD ====================
-
-@app.route("/demo")
-def demo_login():
-    """Auto-login u demo režim."""
-    from flask import session
-    from flask_login import login_user
-    from demo import seed_demo_data
-
-    # Resetuj demo bazu
-    try:
-        seed_demo_data()
-    except Exception as e:
-        flash(f"Demo greška: {e}", "err")
-        return redirect(url_for("auth.login"))
-
-    # Postavi demo mode
-    session["demo_mode"] = True
-    session["currency"] = "RSD"
-    session["lang"] = "sr"
-
-    # Uloguj demo korisnika
-    from db_adapter import connect_demo
-    from auth import User
-
-    conn = connect_demo()
-    try:
-        user = conn.execute(
-            "SELECT * FROM users WHERE email='demo@microstock.local' LIMIT 1"
-        ).fetchone()
-    finally:
-        conn.close()
-
-    if not user:
-        flash("Demo korisnik nije kreiran.", "err")
-        return redirect(url_for("auth.login"))
-
-    user_obj = User(
-        user["id"], user["email"], user["name"], user["role"],
-        language="sr", currency="RSD"
-    )
-    login_user(user_obj, remember=False)
-
-    flash("Dobrodošao u DEMO! Svi podaci se resetuju svakih sat vremena.", "ok")
-    return redirect(url_for("index"))
-
-
-@app.route("/demo/exit")
-def demo_exit():
-    """Izlaz iz demo moda."""
-    from flask import session
-    from flask_login import logout_user
-
-    session.pop("demo_mode", None)
-    logout_user()
-    flash("Izašao si iz demo moda.", "ok")
-    return redirect(url_for("auth.login"))
 
 # ==================== ZABORAVLJENA ŠIFRA ====================
 
